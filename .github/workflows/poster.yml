@@ -28,4 +28,4 @@ jobs:
           FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}
           FB_GROUP_ID: ${{ secrets.FB_GROUP_ID }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: python movimoon_poster.py
+        run: python movimoon-poster.py
