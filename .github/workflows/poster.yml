@@ -1,0 +1,31 @@
+name: MoviMoon Auto Poster - 3 Times Daily
+
+on:
+  schedule:
+    # বাংলাদেশ টাইমে দিনে ৩ বার: সকাল ১১টা, বিকাল ৪টা, রাত ৯টা (UTC তে 05:00, 10:00, 15:00)
+    - cron: '0 5,10,15 * * *'
+  workflow_dispatch: # চাইলে ম্যানুয়ালি রান করতে পারবে
+
+jobs:
+  post-movies:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run auto poster
+        env:
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
+          FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}
+          FB_GROUP_ID: ${{ secrets.FB_GROUP_ID }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python movimoon_poster.py
