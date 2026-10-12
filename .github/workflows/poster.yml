@@ -2,9 +2,11 @@ name: MoviMoon Auto Poster - 3 Times Daily
 
 on:
   schedule:
-    # বাংলাদেশ টাইমে দিনে ৩ বার: সকাল ১০টা, বিকাল ৩টা, রাত ৮টা (UTC তে 04:00, 09:00, 14:00)
-    - cron: '0 4,09,14 * * *'
-  workflow_dispatch: # চাইলে ম্যানুয়ালি রান করতে পারবে
+    # বাংলাদেশ টাইমে ৩ বার: সকাল ১০টা, বিকাল ৩টা, রাত ৮টা
+    - cron: '0 4 * * *'   # সকাল ১০টা BDT
+    - cron: '0 9 * * *'   # বিকাল ৩টা BDT
+    - cron: '0 14 * * *'  # রাত ৮টা BDT
+  workflow_dispatch:
 
 jobs:
   post-movies:
@@ -26,6 +28,5 @@ jobs:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
           FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
           FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}
-          FB_GROUP_ID: ${{ secrets.FB_GROUP_ID }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python movimoon-poster.py
