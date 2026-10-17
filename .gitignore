@@ -1,0 +1,7 @@
+trailer.mp4
+voice.mp3
+final.mp4
+*.mp4
+*.mp3
+__pycache__/
+.env
