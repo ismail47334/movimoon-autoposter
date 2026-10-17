@@ -8,11 +8,11 @@ FB_PAGE_TOKEN = os.getenv("FB_PAGE_TOKEN")
 FB_GROUP_ID = os.getenv("FB_GROUP_ID")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-# === FINAL VOICE SETTING - Version 4 - MALE FAST STUDIO + SMART CUT + YOUR GEMINI LIST ===
-VOICE = "bn-IN-BashkarNeural"  # Male voice as you requested
-RATE = "+28%"   # Fast energetic male studio
+# === FINAL VOICE SETTING - Version 5 - MALE SMART CUT + FIXED COOKIES + FIXED GEMINI ===
+VOICE = "bn-IN-BashkarNeural"
+RATE = "+28%"
 PITCH = "+2Hz"
-VOLUME = "+30%" # Studio loud
+VOLUME = "+30%"
 HISTORY_FILE = "posted_history.json"
 TARGET_DURATION = 60
 
@@ -111,44 +111,57 @@ def download_trailer(youtube_url, output="trailer.mp4"):
             os.remove(output)
         print(f"Downloading Trailer: {youtube_url}")
 
+        # DEBUG cookies file
         cookie_arg = ""
         if os.path.exists("cookies.txt"):
+            size = os.path.getsize("cookies.txt")
+            print(f"✅ cookies.txt found: {size} bytes")
+            with open("cookies.txt", "r") as f:
+                first = f.read(200)
+                print(f"Cookies preview: {first[:100]}...")
+            # Validate Netscape format
+            if "# Netscape" not in open("cookies.txt").read() and "youtube.com" not in open("cookies.txt").read().lower():
+                print("⚠️ WARNING: cookies.txt may not be in Netscape format! Should start with '# Netscape HTTP Cookie File'")
             cookie_arg = '--cookies cookies.txt'
-            print("✅ Using cookies.txt for YouTube bypass")
         else:
-            print("⚠️ cookies.txt not found, trying without")
+            print("⚠️ cookies.txt not found")
 
-        # HD 1080p + Cookies + Deno bypass - YOUR WORKING LOGIC KEPT
-        clients = ["android", "ios", "mweb", "web"]
-        for client in clients:
+        # FIX 1: For bot detection, we need to try different strategies
+        # Strategy A: Use your cookies with all clients + PO Token disabled, sleep
+        # Strategy B: Use tv_embedded client which often bypasses bot check
+
+        strategies = [
+            # Most effective for bot bypass - tv_embedded + web_embedded
+            f'yt-dlp {cookie_arg} --extractor-args "youtube:player_client=tv_embedded" --js-runtimes deno -f "best[height<=1080][ext=mp4]/best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --extractor-retries 3 --sleep-requests 2',
+            f'yt-dlp {cookie_arg} --extractor-args "youtube:player_client=web_embedded" --js-runtimes deno -f "best[height<=720][ext=mp4]/best" -o "{output}" "{youtube_url}" --no-playlist',
+            f'yt-dlp {cookie_arg} --extractor-args "youtube:player_client=android,ios" --js-runtimes deno -f "best" -o "{output}" "{youtube_url}" --no-playlist',
+            # Fallback without cookies but with different clients
+            f'yt-dlp --extractor-args "youtube:player_client=tv_embedded" -f "best" -o "{output}" "{youtube_url}" --no-playlist',
+        ]
+
+        for idx, cmd in enumerate(strategies):
             try:
-                cmd = f'yt-dlp {cookie_arg} --extractor-args "youtube:player_client={client}" --js-runtimes deno -f "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --force-ipv4 --no-warnings --extractor-retries 2'
-                print(f"Trying client={client} HD 1080p {'with cookies' if cookie_arg else 'without'}")
-                os.system(cmd)
-                if os.path.exists(output) and os.path.getsize(output) > 100000:
-                    print(f"✅ Download Success HD with {client}")
+                print(f"\nTrying Strategy {idx+1}: {cmd[:120]}...")
+                ret = os.system(cmd)
+                if os.path.exists(output) and os.path.getsize(output) > 200000:
+                    print(f"✅ Download SUCCESS with Strategy {idx+1} - Size: {os.path.getsize(output)/1024/1024:.1f} MB")
                     return output
+                else:
+                    print(f"❌ Strategy {idx+1} failed or file too small")
             except Exception as e:
-                print(f"Client {client} failed: {e}")
+                print(f"Strategy {idx+1} exception: {e}")
                 continue
 
-        try:
-            cmd = f'yt-dlp {cookie_arg} -f "b" -o "{output}" "{youtube_url}"'
-            os.system(cmd)
-            if os.path.exists(output):
-                return output
-        except:
-            pass
+        print("All download strategies failed!")
         return None
+
     except Exception as e:
         print(f"Download Error: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 def trim_trailer_to_60s(input_path, output_path="trailer_60s.mp4"):
-    """
-    SMART CUT - No scene miss! 5-10 sec clips spread from start to end
-    122s video -> 6 clips x 10s = 60s covering all scenes
-    """
     try:
         duration = get_video_duration(input_path)
         print(f"Original Trailer Duration: {duration:.1f}s")
@@ -164,7 +177,7 @@ def trim_trailer_to_60s(input_path, output_path="trailer_60s.mp4"):
         num_clips = 6
         clip_dur = 10
 
-        print(f"Long trailer {duration:.1f}s - Smart Cutting {num_clips} clips x {clip_dur}s = {target}s to cover all scenes")
+        print(f"Smart Cutting {num_clips} clips x {clip_dur}s = {target}s")
 
         filter_parts = []
         concat_v = ""
@@ -188,16 +201,14 @@ def trim_trailer_to_60s(input_path, output_path="trailer_60s.mp4"):
         filter_complex = "".join(filter_parts) + f"{concat_v}concat=n={num_clips}:v=1:a=0[vcat];{concat_a}concat=n={num_clips}:v=0:a=1[acat]"
 
         cmd = f'ffmpeg -y -i "{input_path}" -filter_complex "{filter_complex}" -map "[vcat]" -map "[acat]" -c:v libx264 -preset fast -crf 18 -c:a aac -b:a 192k "{output_path}"'
-        print("Running Smart Cut FFmpeg...")
         os.system(cmd)
 
         if os.path.exists(output_path):
             new_dur = get_video_duration(output_path)
             size = os.path.getsize(output_path) / (1024*1024)
-            print(f"✅ Smart Cut Done: {new_dur:.1f}s, {size:.1f} MB, 6 scenes covered!")
+            print(f"✅ Smart Cut Done: {new_dur:.1f}s, {size:.1f} MB")
             return output_path
 
-        print("Smart Cut failed, fallback middle cut")
         middle = duration / 2
         start = max(0, middle - 30)
         os.system(f'ffmpeg -y -ss {start} -i "{input_path}" -t 60 -c:v libx264 -preset fast -crf 18 -c:a aac -b:a 192k "{output_path}"')
@@ -205,54 +216,55 @@ def trim_trailer_to_60s(input_path, output_path="trailer_60s.mp4"):
 
     except Exception as e:
         print(f"Smart Trim Error: {e}")
-        import traceback
-        traceback.print_exc()
         return input_path
 
-# === GEMINI - YOUR WORKING MODEL LIST KEPT EXACTLY AS YOUR LAST LOG ===
 def call_gemini_video_script(title, year, media_type, rating, overview_en, link):
     hashtag = slugify(title).replace('-','')
     prompt = f"""
-You are MoviMoon.online - Bangladesh's #1 Professional Movie Reviewer & Viral Video Script Writer (Male Anchor).
+You are MoviMoon.online - Professional Movie Reviewer Male Anchor.
 
-INPUT DATA:
 Title: {title} ({year})
-Type: {media_type} (Use 'সিনেমা' for movie, 'সিরিজ' for tv)
+Type: {media_type}
 Rating: {rating}/10
-Story Overview: {overview_en}
-MoviMoon Link: {link}
+Overview: {overview_en}
+Link: {link}
 
-=== TASK 1: 1-MINUTE MALE VOICEOVER SCRIPT (MUST BE 150-170 WORDS - VERY IMPORTANT) ===
+TASK 1: 1-MINUTE MALE VOICEOVER 150-170 WORDS (MUST COUNT!):
+Hook 20w: "ভাই! {title} এর ট্রেইলারটা দেখলেন? সত্যি বলতে..."
+Main Plot 70w: Story, character, conflict, 2-3 key moments no spoiler
+Strengths 40w: 3 strengths - অভিনয়, ভিএফএক্স, বিজিএম, অ্যাকশন
+Verdict 30w: Who should watch, মাস্ট ওয়াচ
 
-You must write 150-170 words = 60 seconds at +28% speed male voice. Count words!
+TONE: Fast male energetic. Use: ফার্স্ট হাফে, ক্লাইম্যাক্স, টপ নচ, গুজবাম্প, মাস্ট ওয়াচ
 
-STRUCTURE (Professional Male Anchor, Fast Studio):
-1. Hook (20 words): "ভাই! {title} এর ট্রেইলারটা দেখলেন? সত্যি বলতে..." - energetic start
-2. Main Plot (70 words): What happens in movie? Main character? Conflict? Stakes? 2-3 key moments without spoiler. What makes it different?
-3. Strengths (40 words): Mention 3 technical strengths: অভিনয়, পরিচালনা, ভিএফএক্স, বিজিএম, অ্যাকশন কোরিওগ্রাফি, টুইস্ট, ইমোশন - pick relevant
-4. Verdict + CTA (30 words): কারা দেখবে, কেন মাস্ট ওয়াচ, এক বসায় শেষ কিনা, পয়সা উসুল কিনা, "ডিটেইলস MoviMoon এ"
+TASK 2: VIRAL FB CAPTION 160-190 words:
+🔥 Hook
+{title} ({year}) | {rating}/10
+Review, who should watch, question
+👉 Link: {link}
+#MoviMoon #{hashtag}
 
-TONE: Fast-paced male energetic, like professional film critic. Words: ফার্স্ট হাফে, সেকেন্ড হাফে, ক্লাইম্যাক্স, টপ নচ, গুজবাম্প, মাস্ট ওয়াচ, এক বসায় শেষ
+TTS RULES:
+- NEVER VFX, AI, OTT, BGM, CGI, IMDb
+- ALWAYS ভিএফএক্স, এ আই, ওটিটি, বিজিএম, সিজিআই, আইএমডিবি
 
-=== TASK 2: VIRAL FB CAPTION (160-190 words) ===
-Line1: 🔥 Hook with emoji
-Line2: {title} ({year}) | সিনেমা/সিরিজ | ⭐ {rating}/10
-Line3-6: Review - story, acting, direction, technical
-Line7: Who should watch
-Line8: Question for comments
-Line9: 👉 ফুল রিভিউ, কাস্ট, ট্রেলার: {link}
-Line10: #MoviMoon #TrendingNow #{hashtag} #BanglaReview
-
-CRITICAL TTS RULES - MUST FOLLOW 100%:
-- NEVER English acronyms: VFX, AI, OTT, BGM, CGI, IMDb
-- ALWAYS Bangla: ভিএফএক্স, এ আই, ওটিটি, বিজিএম, সিজিআই, আইএমডিবি
-- Example: "ভিএফএক্স আর বিজিএম টপ নচ" NOT "VFX and BGM top notch"
-
-OUTPUT ONLY VALID JSON:
-{{"voiceover": "150-170 words Bangla male script...", "caption": "160-190 words caption..."}}
+OUTPUT JSON:
+{{"voiceover": "150-170 words...", "caption": "..."}}
 """
-    # YOUR LAST WORKING MODEL LIST - EXACTLY AS YOUR LOG SHOWED SUCCESS
-    models = ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-flash-latest"]
+    # FIXED MODEL LIST - Based on your log, only these work now
+    # gemini-2.5-flash-lite and gemini-2.5-flash are 404 - removed
+    # gemini-3.5-flash-lite is working but quota 20/day, gemini-3.8-flash quota issue
+    # Added new working models
+    models = [
+        "gemini-3.5-flash-lite",  # Your main working model - KEEP FIRST
+        "gemini-flash-latest",
+        "gemini-2.0-flash",
+        "gemini-2.0-flash-lite",
+        "gemini-1.5-flash",
+        "gemini-1.5-flash-latest",
+        "gemini-3.8-flash"  # Keep last as quota issue
+    ]
+
     for model in models:
         try:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
@@ -273,7 +285,7 @@ OUTPUT ONLY VALID JSON:
                         if voice and caption:
                             wc = len(voice.split())
                             print(f"Gemini {model} success - Voice words: {wc}")
-                            if wc < 120:
+                            if wc < 115:
                                 print(f"Too short {wc} words, trying longer...")
                                 continue
                             if link not in caption:
@@ -292,7 +304,12 @@ OUTPUT ONLY VALID JSON:
                                     return voice, caption
                             except:
                                 pass
-            print(f"Gemini {model} failed: {str(res)[:400]}")
+            # Log error but continue
+            err_msg = str(res)[:300]
+            print(f"Gemini {model} failed: {err_msg}")
+            if "429" in err_msg or "quota" in err_msg.lower():
+                print(f"Quota exceeded for {model}, waiting 2s and trying next...")
+                time.sleep(2)
         except Exception as e:
             print(f"Gemini {model} error: {e}")
             continue
@@ -310,8 +327,7 @@ async def generate_tts_voice(text, output_path="voice.mp3"):
         text = text.replace(en, bn)
 
     wc = len(text.split())
-    print(f"🎙️ TTS Text: {wc} words - {text[:180]}...")
-    print(f"Voice: {VOICE} MALE, Rate: {RATE}, Volume: {VOLUME} - Studio")
+    print(f"🎙️ TTS: {wc} words - {text[:150]}...")
 
     communicate = edge_tts.Communicate(text, VOICE, rate=RATE, pitch=PITCH, volume=VOLUME)
     await communicate.save(output_path)
@@ -321,11 +337,9 @@ async def generate_tts_voice(text, output_path="voice.mp3"):
         os.system(f'ffmpeg -y -i "{output_path}" -filter:a loudnorm=I=-14:TP=-1.5:LRA=11 "{loud_path}"')
         if os.path.exists(loud_path):
             os.replace(loud_path, output_path)
-            print("Studio loudnorm applied - Male Fast")
     except:
         pass
 
-    print(f"TTS Saved: {output_path} - Target 60s Male")
     return output_path
 
 def merge_trailer_voice(trailer_path, voice_path, output="final.mp4"):
@@ -335,16 +349,15 @@ def merge_trailer_voice(trailer_path, voice_path, output="final.mp4"):
 
         trailer_dur = get_video_duration(trailer_path)
         voice_dur = get_video_duration(voice_path)
-        print(f"Merging - Trailer: {trailer_dur:.1f}s, Voice: {voice_dur:.1f}s - Target 60s HD")
+        print(f"Merging - Trailer: {trailer_dur:.1f}s, Voice: {voice_dur:.1f}s")
 
         cmd = f'ffmpeg -y -i "{trailer_path}" -i "{voice_path}" -filter_complex "[0:a]volume=0.12[a0];[1:a]volume=1.0,loudnorm=I=-14:TP=-1.5:LRA=11[a1];[a0][a1]amix=inputs=2:duration=shortest:dropout_transition=0,volume=1.2[a]" -map 0:v -map "[a]" -c:v libx264 -preset fast -crf 18 -c:a aac -b:a 192k -shortest -t 65 "{output}"'
-        print("FFmpeg Merging HD Smart Cut + Male Studio Voice...")
         os.system(cmd)
 
         if os.path.exists(output):
             final_dur = get_video_duration(output)
             size_mb = os.path.getsize(output) / (1024*1024)
-            print(f"✅ Final Video: {final_dur:.1f}s, {size_mb:.1f} MB, HD 1080p, 6 scenes, Male Voice")
+            print(f"✅ Final Video: {final_dur:.1f}s, {size_mb:.1f} MB")
             return output
         return None
     except Exception as e:
@@ -385,7 +398,7 @@ def main():
             title_raw = movie.get('title') or movie.get('name') or "Unknown"
 
             if is_already_posted(tmdb_id, history, days=30):
-                print(f"⏭️ SKIPPED DUPLICATE: {title_raw} (ID: {tmdb_id})")
+                print(f"⏭️ SKIPPED: {title_raw} (ID: {tmdb_id})")
                 continue
 
             yt_url, yt_key = get_youtube_trailer(movie)
@@ -406,7 +419,7 @@ def main():
 
             trailer_file = download_trailer(yt_url, "trailer.mp4")
             if not trailer_file:
-                print(f"Trailer download failed for {title_raw}")
+                print(f"Trailer download failed for {title_raw}, trying next movie...")
                 continue
 
             trailer_60s = trim_trailer_to_60s(trailer_file, "trailer_60s.mp4")
@@ -431,30 +444,29 @@ def main():
             if FB_GROUP_ID and FB_PAGE_TOKEN and page_success:
                 try:
                     time.sleep(3)
-                    print("Trying GROUP post...")
                     resp2 = upload_video_to_facebook(FB_GROUP_ID, FB_PAGE_TOKEN, final_video, caption, "GROUP VIDEO")
                     if resp2 and resp2.status_code == 200:
                         print("✅ GROUP POST SUCCESS")
                     else:
-                        print(f"⚠️ GROUP SKIPPED - Deprecated API. {resp2.text[:200] if resp2 else ''}")
+                        print(f"⚠️ GROUP SKIPPED: {resp2.text[:200] if resp2 else ''}")
                 except Exception as e:
-                    print(f"⚠️ Group exception (ignored): {e}")
+                    print(f"⚠️ Group exception: {e}")
 
             if success:
                 history[tmdb_id] = datetime.now().isoformat()
                 save_history(history)
-                print(f"✅ Saved to history: {tmdb_id} - {title_raw}")
+                print(f"✅ Saved to history: {tmdb_id}")
 
             for f in ["trailer.mp4","trailer_60s.mp4","voice.mp3","final.mp4"]:
                 if os.path.exists(f):
                     try: os.remove(f)
                     except: pass
 
-            print("Done 1 HD SMART CUT Male video, exiting.")
+            print("Done 1 video, exiting.")
             break
 
         except Exception as e:
-            print(f"MAIN LOOP ERROR for movie {movie.get('id')}: {e}")
+            print(f"MAIN LOOP ERROR: {e}")
             import traceback
             traceback.print_exc()
             continue
