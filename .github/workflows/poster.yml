@@ -1,4 +1,4 @@
-name: MoviMoon Video AutoPoster - HD 1MIN
+name: MoviMoon Video AutoPoster - HD 1MIN FIXED
 
 on:
   schedule:
@@ -30,15 +30,29 @@ jobs:
           pip install -r requirements.txt
           pip install -U "yt-dlp[default]" -U
 
-      - name: Create cookies.txt from Secret
+      - name: Create cookies.txt from Secret (Fixed)
         env:
           YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
         run: |
           if [ -n "$YOUTUBE_COOKIES" ]; then
             echo "$YOUTUBE_COOKIES" > cookies.txt
-            echo "✅ cookies.txt created"
+            echo "✅ cookies.txt created, size: $(wc -c < cookies.txt) bytes"
+            echo "First 200 chars:"
+            head -c 200 cookies.txt
+            echo ""
+            # Check if valid Netscape format
+            if grep -q "youtube.com" cookies.txt; then
+              echo "✅ Contains youtube.com - looks valid"
+            else
+              echo "⚠️ WARNING: Does not contain youtube.com, may be invalid!"
+            fi
+            if head -1 cookies.txt | grep -q "# Netscape"; then
+              echo "✅ Netscape format OK"
+            else
+              echo "⚠️ WARNING: First line should be '# Netscape HTTP Cookie File'"
+            fi
           else
-            echo "⚠️ No cookies, will try without"
+            echo "⚠️ No cookies secret found"
           fi
 
       - name: Run HD Video Autoposter
@@ -55,5 +69,5 @@ jobs:
           git config --global user.name 'MoviMoon Bot'
           git config --global user.email 'bot@movimoon.online'
           git add posted_history.json || echo "No history"
-          git diff --staged --quiet || git commit -m "Update posted history HD [skip ci]"
+          git diff --staged --quiet || git commit -m "Update posted history FIXED [skip ci]"
           git push || echo "No changes"
