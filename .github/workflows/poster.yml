@@ -20,18 +20,26 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install FFmpeg + Deno + NodeJS (For YouTube Bypass)
+      - name: Install FFmpeg + Deno + NodeJS
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg
-          # Deno Install - YouTube Bot Bypass এর জন্য Must
           curl -fsSL https://deno.land/install.sh | sh
           echo "$HOME/.deno/bin" >> $GITHUB_PATH
-          # NodeJS
           sudo apt-get install -y nodejs
           pip install -r requirements.txt
-          # yt-dlp Latest Nightly - Bot Fix সহ
           pip install -U "yt-dlp[default]" -U
+
+      - name: Create cookies.txt from Secret
+        env:
+          YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
+        run: |
+          if [ -n "$YOUTUBE_COOKIES" ]; then
+            echo "$YOUTUBE_COOKIES" > cookies.txt
+            echo "✅ cookies.txt created from secret"
+          else
+            echo "⚠️ No YOUTUBE_COOKIES secret found, will try without cookies"
+          fi
 
       - name: Run Video Autoposter
         env:
