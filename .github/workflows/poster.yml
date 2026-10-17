@@ -1,0 +1,45 @@
+name: MoviMoon Video AutoPoster - Final
+
+on:
+  schedule:
+    - cron: '0 4 * * *'
+    - cron: '0 9 * * *'
+    - cron: '0 14 * * *'
+  workflow_dispatch:
+
+jobs:
+  post-videos:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install FFmpeg + Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          pip install -r requirements.txt
+
+      - name: Run Video Autoposter
+        env:
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
+          FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}
+          FB_GROUP_ID: ${{ secrets.FB_GROUP_ID }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python movimoon-video-autoposter.py
+
+      - name: Commit posted history (Prevent Repost)
+        run: |
+          git config --global user.name 'MoviMoon Bot'
+          git config --global user.email 'bot@movimoon.online'
+          git add posted_history.json || echo "No history file yet"
+          git diff --staged --quiet || git commit -m "Update posted history [skip ci]"
+          git push || echo "No changes to push"
