@@ -11,8 +11,7 @@ jobs:
   post-videos:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -21,11 +20,18 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install FFmpeg + Dependencies
+      - name: Install FFmpeg + Deno + NodeJS (For YouTube Bypass)
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg
+          # Deno Install - YouTube Bot Bypass এর জন্য Must
+          curl -fsSL https://deno.land/install.sh | sh
+          echo "$HOME/.deno/bin" >> $GITHUB_PATH
+          # NodeJS
+          sudo apt-get install -y nodejs
           pip install -r requirements.txt
+          # yt-dlp Latest Nightly - Bot Fix সহ
+          pip install -U "yt-dlp[default]" -U
 
       - name: Run Video Autoposter
         env:
@@ -36,10 +42,10 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python movimoon-video-autoposter.py
 
-      - name: Commit posted history (Prevent Repost)
+      - name: Commit posted history
         run: |
           git config --global user.name 'MoviMoon Bot'
           git config --global user.email 'bot@movimoon.online'
-          git add posted_history.json || echo "No history file yet"
+          git add posted_history.json || echo "No history"
           git diff --staged --quiet || git commit -m "Update posted history [skip ci]"
-          git push || echo "No changes to push"
+          git push || echo "No changes"
