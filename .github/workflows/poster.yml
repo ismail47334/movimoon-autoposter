@@ -1,4 +1,4 @@
-name: MoviMoon Video AutoPoster - Final
+name: MoviMoon Video AutoPoster - HD 1MIN
 
 on:
   schedule:
@@ -36,12 +36,12 @@ jobs:
         run: |
           if [ -n "$YOUTUBE_COOKIES" ]; then
             echo "$YOUTUBE_COOKIES" > cookies.txt
-            echo "✅ cookies.txt created from secret"
+            echo "✅ cookies.txt created"
           else
-            echo "⚠️ No YOUTUBE_COOKIES secret found, will try without cookies"
+            echo "⚠️ No cookies, will try without"
           fi
 
-      - name: Run Video Autoposter
+      - name: Run HD Video Autoposter
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
           FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
@@ -55,5 +55,5 @@ jobs:
           git config --global user.name 'MoviMoon Bot'
           git config --global user.email 'bot@movimoon.online'
           git add posted_history.json || echo "No history"
-          git diff --staged --quiet || git commit -m "Update posted history [skip ci]"
+          git diff --staged --quiet || git commit -m "Update posted history HD [skip ci]"
           git push || echo "No changes"
