@@ -102,34 +102,34 @@ def download_trailer(youtube_url, output="trailer.mp4"):
         if os.path.exists(output):
             os.remove(output)
         
-        print(f"Downloading Trailer (Bypass Mode): {youtube_url}")
+        print(f"Downloading Trailer: {youtube_url}")
         
-        # === YOUTUBE BOT BYPASS LOGIC - 3 Client Try করবে ===
-        clients = [
-            "android",  # সবচেয়ে Powerful Bypass
-            "ios",
-            "mweb"
-        ]
+        # Check if cookies.txt exists (from GitHub Secret)
+        cookie_arg = ""
+        if os.path.exists("cookies.txt"):
+            cookie_arg = '--cookies cookies.txt'
+            print("✅ Using cookies.txt for YouTube bypass")
+        else:
+            print("⚠️ cookies.txt not found, trying without")
+        
+        # === FINAL BYPASS LOGIC ===
+        clients = ["android", "ios", "mweb", "web"]
         
         for client in clients:
             try:
-                # Deno + Android Client = Bot Check Bypass
-                cmd = f'yt-dlp --extractor-args "youtube:player_client={client}" --js-runtimes deno -f "mp4[height<=720][ext=mp4]/best[height<=720]" -o "{output}" "{youtube_url}" --no-playlist --merge-output-format mp4 --force-ipv4 --no-warnings'
-                print(f"Trying with client: {client}")
+                cmd = f'yt-dlp {cookie_arg} --extractor-args "youtube:player_client={client}" --js-runtimes deno -f "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --force-ipv4 --no-warnings --extractor-retries 2'
+                print(f"Trying client={client} {'with cookies' if cookie_arg else 'without cookies'}")
                 ret = os.system(cmd)
-                if os.path.exists(output) and os.path.getsize(output) > 100000: # 100KB এর বেশি হলে Success
+                if os.path.exists(output) and os.path.getsize(output) > 100000:
                     print(f"✅ Download Success with {client}")
                     return output
             except Exception as e:
                 print(f"Client {client} failed: {e}")
                 continue
         
-        # Last Try: Piped API Fallback (YouTube Proxy)
+        # Final fallback: try with web client + cookies
         try:
-            print("Trying Piped Fallback...")
-            video_id = youtube_url.split("v=")[-1].split("&")[0]
-            # Piped API দিয়ে Direct Link
-            cmd = f'yt-dlp --extractor-args "youtube:player_client=android" -f "best" -o "{output}" "https://www.youtube.com/watch?v={video_id}"'
+            cmd = f'yt-dlp {cookie_arg} -f "b" -o "{output}" "{youtube_url}"'
             os.system(cmd)
             if os.path.exists(output):
                 return output
@@ -137,12 +137,9 @@ def download_trailer(youtube_url, output="trailer.mp4"):
             pass
             
         return None
-        
     except Exception as e:
         print(f"Download Error: {e}")
         return None
-
-# === GEMINI - EXACT SAME MODEL LIST + ERROR HANDLING AS YOUR CURRENT CODE ===
 def call_gemini_video_script(title, year, media_type, rating, overview_en, link):
     hashtag = slugify(title).replace('-','')
     prompt = f"""
