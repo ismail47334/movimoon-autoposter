@@ -255,25 +255,43 @@ def call_gemini_video_script(title, year, m_type, rating, overview, link, movie=
         caption = f"🎬 Movie - {title} ({year})\n🎭 Genre - {genre_str}\n⭐ Rating - {rating}/10\n🔗 Link: {link}\n#MoviMoon"
         return voice, caption
 
-    prompt = f"""
-You are MoviMoon Senior Bengali Voiceover Director. CRITICAL: Need 165-180 Bengali words minimum to fill 60 sec. Your last output was only 96 words = 35 sec FAILED. Must write LONGER. Count words before output.
+    prompt = f"""You are the Senior Bengali Voiceover Director & Lead Scriptwriter for MoviMoon.
+Your core objective is to write an engaging, dramatic, and precise 60-second Bengali video narration script based on the provided movie details.
 
-MOVIE: Title {title} Year {year} Rating {rating}/10 Genre {genre_str} Plot {overview} Link {link}
+### CRITICAL REQUIREMENTS (WORD COUNT):
+- STRICT WORD COUNT: EXACTLY between 165 and 180 Bengali words. 
+- UNDER NO CIRCUMSTANCES should the word count be less than 165 words (Short scripts cause audio timing failure).
+- Do a strict self-count before generating the final JSON response.
 
-RULES:
-1. 100 percent PURE BENGALI no English. Title transliterate to Bengali.
-2. 165-180 words EXACT.
-3. HOOK 0-10s 28-30 words STORY 10-30s 55-60 words ACTING 30-50s 50-55 words CTA 50-60s 25-30 words
-4. No English abbreviations.
+### INPUT DATA:
+- Movie Title: {title}
+- Release Year: {year}
+- Rating: {rating}/10
+- Genre: {genre_str}
+- Overview/Plot: {overview}
+- Movie Link: {link}
 
-OUTPUT JSON ONLY:
+### SCRIPT STRUCTURE & TIMING BREAKDOWN:
+1. HOOK (0-10s) -> [28 to 30 words]: High energy opening to grab attention instantly.
+2. STORY PLOT (10-30s) -> [55 to 60 words]: Brief, intriguing core synopsis without spoilers.
+3. ACTING & VISUALS (30-50s) -> [50 to 55 words]: Critique of performance, direction, atmosphere, or climax setup.
+4. CALL TO ACTION / OUTRO (50-60s) -> [25 to 30 words]: Wrap up with rating mention and direct audience to watch on MoviMoon via the link.
+
+### LANGUAGE RULES:
+1. 100% Pure Bengali text using proper Bengali punctuation (। , ! ?).
+2. NO English words, letters, or numbers in the "voiceover" text (Transliterate English titles/numbers into Bengali, e.g., 8.5 -> ৮.৫ or সাড়ে আট).
+3. Transliterate the movie title cleanly into Bengali for "bangla_title".
+4. Tone: Energetic, dramatic, and professional cinema narrator voice.
+
+### REQUIRED OUTPUT FORMAT:
+Return ONLY a valid, raw JSON object. Do NOT include markdown code blocks, explanations, or extra text.
+
 {{
-"voiceover": "165-180 words pure Bengali...",
-"bangla_title": "Title in Bengali",
-"caption": "caption",
-"word_count": 170
-}}
-"""
+  "voiceover": "১৬৫ থেকে ১৮০ শব্দের পূর্ণাঙ্গ বাংলা ভয়েসওভার টেক্সট...",
+  "bangla_title": "বাংলায় মুভির নাম",
+  "caption": "আকর্ষণীয় সোশ্যাল মিডিয়া ক্যাপশন উইথ হ্যাশট্যাগ",
+  "word_count": 172
+}}"""
 
     models = ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-flash-latest"]
     for model in models:
@@ -295,11 +313,8 @@ OUTPUT JSON ONLY:
                     caption = j.get("caption","").strip()
                     wc = len(voice.split())
                     print(f"Gemini {model} OK - {wc} words")
-                    if wc < 90:  # lowered from 140 - 96 words = ~35s but still usable, 148 is good
-                        print(f"Too short {wc}, retry")
-                        continue
-                    # If 90-139, still accept but log warning - better than failing all
-                    if wc < 130:
+                    # If 140-160, still accept but log warning - better than failing all
+                    if wc < 140:
                         print(f"Accepting short {wc} words (will be ~40-50s, usable)")
                     if link not in caption:
                         caption += f"\n\nLink: {link}"
