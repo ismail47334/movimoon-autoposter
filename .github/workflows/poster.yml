@@ -20,26 +20,20 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install FFmpeg + Deno + NodeJS + yt-dlp POToken
+      - name: Install FFmpeg + Deno + NodeJS + yt-dlp
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg
-          # Install Deno - Required for PO Token bypass
+          sudo apt-get install -y ffmpeg nodejs
+          # Install Deno - Required for PO Token bypass (fixes bot detection)
           curl -fsSL https://deno.land/install.sh | sh
           echo "$HOME/.deno/bin" >> $GITHUB_PATH
           export DENO_INSTALL="$HOME/.deno"
           export PATH="$DENO_INSTALL/bin:$PATH"
           $HOME/.deno/bin/deno --version
-          # Install NodeJS for fallback
-          sudo apt-get install -y nodejs
-          # Install yt-dlp with all extras including PO Token support
+          # Install yt-dlp with default extras (includes ejs for PO Token)
           pip install -r requirements.txt
-          pip install -U "yt-dlp[default]" -U
-          pip install -U bgutil -U
+          pip install -U "yt-dlp[default]"
           yt-dlp --version
-          # Test deno runtime
-          echo "Testing Deno PO Token runtime..."
-          yt-dlp --js-runtimes deno --extractor-args "youtube:player_client=android" --list-formats "https://www.youtube.com/watch?v=BaW_jenozKc" --no-playlist || echo "Test failed but continuing - will retry in script"
 
       - name: Create cookies.txt (Optional Fallback)
         env:
@@ -47,7 +41,7 @@ jobs:
         run: |
           if [ -n "$YOUTUBE_COOKIES" ]; then
             echo "$YOUTUBE_COOKIES" > cookies.txt
-            echo "cookies.txt created - size $(wc -c < cookies.txt) bytes - optional fallback"
+            echo "cookies.txt created - size $(wc -c < cookies.txt) bytes"
           else
             echo "No cookies - PO Token method will be used (no cookies needed)"
           fi
@@ -69,5 +63,5 @@ jobs:
           git config --global user.name 'MoviMoon Bot'
           git config --global user.email 'bot@movimoon.online'
           git add posted_history.json || echo "No history"
-          git diff --staged --quiet || git commit -m "Update posted history PO-TOKEN FIX [skip ci]"
+          git diff --staged --quiet || git commit -m "Update posted history FIXED [skip ci]"
           git push || echo "No changes"
