@@ -1,4 +1,4 @@
-name: MoviMoon Video AutoPoster - HD 1MIN FIXED
+name: MoviMoon Video AutoPoster - FIXED 2026
 
 on:
   schedule:
@@ -20,31 +20,40 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install FFmpeg + Deno + NodeJS + yt-dlp
+      - name: Install FFmpeg + Deno + yt-dlp (FIXED)
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg nodejs
-          # Install Deno - Required for PO Token bypass (fixes bot detection)
+          sudo apt-get install -y ffmpeg
+          
+          # Install Deno - Required for PO Token bypass
           curl -fsSL https://deno.land/install.sh | sh
           echo "$HOME/.deno/bin" >> $GITHUB_PATH
           export DENO_INSTALL="$HOME/.deno"
           export PATH="$DENO_INSTALL/bin:$PATH"
           $HOME/.deno/bin/deno --version
-          # Install yt-dlp with default extras (includes ejs for PO Token)
+          
+          # Install with default + ejs (critical for bot bypass)
           pip install -r requirements.txt
           pip install -U "yt-dlp[default]"
+          pip install -U yt-dlp-ejs
           yt-dlp --version
 
-      - name: Create cookies.txt (Optional Fallback)
+      - name: Create cookies.txt + Verify
         env:
           YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
         run: |
           if [ -n "$YOUTUBE_COOKIES" ]; then
             echo "$YOUTUBE_COOKIES" > cookies.txt
+            # Ensure Netscape format header exists
+            if ! head -n1 cookies.txt | grep -q "# Netscape"; then
+              echo "# Netscape HTTP Cookie File" | cat - cookies.txt > temp && mv temp cookies.txt
+            fi
             echo "cookies.txt created - size $(wc -c < cookies.txt) bytes"
+            head -n 5 cookies.txt
           else
-            echo "No cookies - PO Token method will be used (no cookies needed)"
+            echo "No cookies secret found - will try without cookies"
           fi
+          ls -lh
 
       - name: Run HD Video Autoposter
         env:
