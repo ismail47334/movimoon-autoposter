@@ -228,7 +228,17 @@ Create JSON with:
 {{"voiceover": "40-50 words Bengali voiceover for TTS, exciting", "caption": "Facebook caption in Bengali with emojis and hashtags, include link"}}
 Only JSON, no extra text.
 """
-    models = ["gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-pro"]
+    # FIXED 2026-10-18 18:02 BD - Search verified: Oct 2026 flagship is 3.8 Flash, 3.5 Flash-Lite cheapest
+    # Source: ai.google.dev free tier now uses Gemini 3.x, Google says new keys must use 3.8 Flash or 3.5 Flash-Lite
+    models = [
+        "gemini-3.8-flash",           # Current flagship - Google recommends for new projects (Oct 2026)
+        "gemini-3.5-flash-lite",       # Cheapest, lightest - for new API keys
+        "gemini-3.6-flash",            # Fallback if 3.8 fails
+        "gemini-3.5-flash",            # Stable mid
+        "gemini-3.8-flash-lite",       # Lite variant
+        "gemini-flash-latest",         # Alias
+        "gemini-2.5-flash"             # Old but still works for existing keys
+    ]
     for model in models:
         try:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
