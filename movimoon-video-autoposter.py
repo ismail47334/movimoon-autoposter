@@ -217,16 +217,42 @@ def trim_trailer_to_60s(input_path, output_path="trailer_60s.mp4"):
 
 def call_gemini_video_script(title, year, m_type, rating, overview, link):
     if not GEMINI_API_KEY:
-        voice = f"{title} সিনেমাটি {year} সালে মুক্তি পেয়েছে। অসাধারণ গল্প এবং দুর্দান্ত অভিনয়।"
+        voice = f"{title} বন্ধুরা, {year} সালের এই ধামাকা সিনেমাটি নিয়ে এসেছি আপনাদের জন্য। এই সিনেমার গল্পটা এতটাই টানটান উত্তেজনায় ভরা যে একবার দেখা শুরু করলে শেষ না করে উঠতে পারবেন না। প্রধান চরিত্রের অসাধারণ অভিনয়, দুর্দান্ত সিনেমাটোগ্রাফি এবং ব্যাকগ্রাউন্ড মিউজিক আপনাকে এক মুহূর্তের জন্যও বোর হতে দেবে না। বিশেষ করে শেষের টুইস্টটা আপনার মাথা ঘুরিয়ে দেবে। যারা থ্রিলার এবং অ্যাকশন পছন্দ করেন তাদের জন্য এটা মাস্ট ওয়াচ। দেরি না করে এখনই দেখে ফেলুন মুভিমুনে।"
         caption = f"🎬 {title} ({year}) - {rating}/10\n\n{overview[:200]}\n\n👉 ফুল রিভিউ: {link}\n\n#MovieReview #MoviMoon"
         return voice, caption
-    prompt = f"""You are a Bengali movie reviewer for MoviMoon.
-Movie: {title} ({year}) Type: {m_type} Rating: {rating}
-Overview: {overview}
-Link: {link}
-Create JSON with:
-{{"voiceover": "40-50 words Bengali voiceover for TTS, exciting", "caption": "Facebook caption in Bengali with emojis and hashtags, include link"}}
-Only JSON, no extra text.
+
+    # MASTER PROMPT FOR 1-MINUTE PROFESSIONAL VOICEOVER (140-150 WORDS = 60 SEC)
+    prompt = f"""
+You are MoviMoon's Lead Professional Bengali Movie Critic & Voiceover Script Writer. Your voiceover will be used for TTS (BashkarNeural, +28% speed). It MUST be exactly 1 minute long.
+
+MOVIE DATA:
+Title: {title}
+Year: {year}
+Type: {m_type} (movie/tv)
+Rating: {rating}/10
+Plot: {overview}
+Site Link: {link}
+
+TASK: Write a HIGHLY PROFESSIONAL, CINEMATIC 1-MINUTE voiceover script.
+
+STRICT RULES FOR VOICEOVER (Bengali, 135-150 words, 60 seconds):
+1. Language: Pure natural spoken Bengali (mix of চলিত ভাষা). No English words except title.
+2. Length: 135 to 150 words MUST. Count internally. This is for 60 seconds.
+3. Structure (5 parts):
+   - [HOOK 0-8s]: Start with "বন্ধুরা, কেমন আছেন সবাই? আজকে কথা বলব..." or explosive hook about {title}
+   - [STORY 8-25s]: What is the story? Use plot but make it thrilling, don't spoil ending.
+   - [PERFORMANCE & TECH 25-45s]: Talk about Acting, Direction, BGM, VFX, Cinematography. Mention {year} and why it's trending. Mention rating {rating} if >7.
+   - [WHY WATCH 45-53s]: Why should audience watch? Who will love it? (action lovers, family etc)
+   - [CTA 53-60s]: "পুরো সিনেমাটির HD প্রিন্ট, বিস্তারিত রিভিউ এবং ডাউনলোড লিংক পেয়ে যাবেন আমাদের ওয়েবসাইট movimoon.online এ।"
+4. Tone: Professional, exciting, like a top YouTube movie reviewer (think Filmy Duniya). Not robotic.
+5. NO English abbreviations. Write VFX as ভিএফএক্স.
+6. End with invitation to visit site.
+
+OUTPUT FORMAT: Valid JSON ONLY. No markdown.
+{{
+"voiceover": "Here will be 135-150 words Bengali voiceover, exactly 1 minute long...",
+"caption": "Here write a VIRAL Facebook caption in Bengali: Line 1: Title with emoji 🎬🔥, Line 2: Rating + Year, Line 3: 2-line hook, Line 4: Call to action with link {link}, Line 5: 8-10 hashtags like #MoviMoon #MovieReview #NewMovie #BengaliReview #Trending. Include link compulsorily."
+}}
 """
     # FIXED 2026-10-18 18:02 BD - Search verified: Oct 2026 flagship is 3.8 Flash, 3.5 Flash-Lite cheapest
     # Source: ai.google.dev free tier now uses Gemini 3.x, Google says new keys must use 3.8 Flash or 3.5 Flash-Lite
@@ -360,11 +386,19 @@ def main():
                 if resp and resp.status_code == 200:
                     success = True
                     print("PAGE SUCCESS")
+                else:
+                    print(f"PAGE FAILED: {resp.text[:300] if resp else 'No response'}")
+            # GROUP POST - SKIP if fails (Group API needs separate permissions, Page success is enough)
             if FB_GROUP_ID and FB_PAGE_TOKEN and success:
-                time.sleep(3)
-                resp2 = upload_video_to_facebook(FB_GROUP_ID, FB_PAGE_TOKEN, final_video, caption, "GROUP")
-                if resp2 and resp2.status_code == 200:
-                    print("GROUP SUCCESS")
+                try:
+                    time.sleep(3)
+                    resp2 = upload_video_to_facebook(FB_GROUP_ID, FB_PAGE_TOKEN, final_video, caption, "GROUP")
+                    if resp2 and resp2.status_code == 200:
+                        print("GROUP SUCCESS")
+                    else:
+                        print(f"GROUP SKIP (not critical): {resp2.text[:200] if resp2 else 'No response'} - Page post is enough")
+                except Exception as ge:
+                    print(f"GROUP error (skip): {ge}")
             if success:
                 history[tmdb_id] = datetime.now().isoformat()
                 save_history(history)
