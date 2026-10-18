@@ -20,7 +20,7 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install FFmpeg + Deno + yt-dlp (FINAL)
+      - name: Install FFmpeg + Deno + yt-dlp
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg
@@ -33,25 +33,19 @@ jobs:
           pip install -U "yt-dlp[default]" yt-dlp-ejs
           yt-dlp --version
 
-      - name: Create cookies.txt (FIXED - preserve format)
+      - name: Create cookies.txt
         env:
           YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
         run: |
           if [ -n "$YOUTUBE_COOKIES" ]; then
             printf "%s" "$YOUTUBE_COOKIES" > cookies.txt
-            # If file doesn't start with Netscape header, it's probably JSON - convert not possible, keep as is and try
-            if head -n1 cookies.txt | grep -q "http_cookie"; then
-              echo "Cookies in JSON format detected - converting attempt"
-            fi
-            echo "cookies.txt size: $(wc -c < cookies.txt) bytes, lines: $(wc -l < cookies.txt)"
-            head -c 200 cookies.txt
-            echo ""
+            echo "cookies.txt: $(wc -c < cookies.txt) bytes"
           else
-            echo "No YOUTUBE_COOKIES secret"
+            echo "No YOUTUBE_COOKIES"
           fi
           ls -lh
 
-      - name: Run HD Video Autoposter (DEBUG MODE)
+      - name: Run HD Video Autoposter
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
           FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
@@ -61,11 +55,6 @@ jobs:
         run: |
           export DENO_INSTALL="$HOME/.deno"
           export PATH="$DENO_INSTALL/bin:$PATH"
-          echo "=== Python version ==="
-          python --version
-          echo "=== Files ==="
-          ls -lh
-          echo "=== Starting Python ==="
           python -u movimoon-video-autoposter.py
 
       - name: Commit posted history
