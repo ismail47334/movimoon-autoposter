@@ -18,7 +18,7 @@ FB_GROUP_ID = os.getenv("FB_GROUP_ID")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 VOICE = "bn-IN-BashkarNeural"
-RATE = "+18%"  # slower for 1min = more clear
+RATE = "+28%"  # slower for 1min = more clear
 PITCH = "+2Hz"
 VOLUME = "+30%"
 HISTORY_FILE = "posted_history.json"
@@ -236,7 +236,7 @@ def call_gemini_video_script(title, year, m_type, rating, overview, link):
         return voice, caption
 
     prompt = f"""
-You are MoviMoon's Lead Professional Bengali Movie Critic & Voiceover Script Writer. Your voiceover will be used for TTS (BashkarNeural, +18% speed). It MUST be exactly 1 minute long.
+You are MoviMoon's Lead Professional Bengali Movie Critic & Voiceover Script Writer. Your voiceover will be used for EDGE TTS (BashkarNeural, +28% speed). It MUST be exactly 1 minute long.
 
 MOVIE DATA:
 Title: {title}
@@ -248,9 +248,9 @@ Site Link: {link}
 
 TASK: Write a HIGHLY PROFESSIONAL, CINEMATIC 1-MINUTE voiceover script.
 
-STRICT RULES FOR VOICEOVER (Bengali, 135-150 words, 60 seconds):
-1. Language: Pure natural spoken Bengali (mix of চলিত ভাষা). No English words except title.
-2. Length: 135 to 150 words MUST. Count internally. This is for 60 seconds.
+STRICT RULES FOR VOICEOVER (Bengali, 140-160 words, 60 seconds):
+1. Language: Pure natural spoken Bengali (mix of চলিত ভাষা). No English words title alos Bengali.
+2. Length: 140 to 160 words MUST. Count internally. This is for 60 seconds.
 3. Structure (5 parts):
    - [HOOK 0-8s]: Start with "বন্ধুরা, কেমন আছেন সবাই? আজকে কথা বলব..." or explosive hook about {title}
    - [STORY 8-25s]: What is the story? Use plot but make it thrilling, don't spoil ending.
@@ -263,7 +263,7 @@ STRICT RULES FOR VOICEOVER (Bengali, 135-150 words, 60 seconds):
 
 OUTPUT FORMAT: Valid JSON ONLY. No markdown.
 {{
-"voiceover": "Here will be 135-150 words Bengali voiceover, exactly 1 minute long...",
+"voiceover": "Here will be 140-160 words Bengali voiceover, exactly 1 minute long...",
 "caption": "Here write a VIRAL Facebook caption in Bengali: Line 1: Title with emoji 🎬🔥, Line 2: Rating + Year, Line 3: 2-line hook, Line 4: Call to action with link {link}, Line 5: 8-10 hashtags like #MoviMoon #MovieReview #NewMovie #BengaliReview #Trending. Include link compulsorily."
 }}
 """
