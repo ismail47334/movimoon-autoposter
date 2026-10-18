@@ -2,7 +2,7 @@ import os, requests, random, re, time, asyncio, json, subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
 
-print("=== MoviMoon Bot - MASTER V8 FAST ===")
+print("=== MoviMoon Bot - MASTER V9 FAST 10-TRY ===")
 
 try:
     import edge_tts
@@ -96,8 +96,8 @@ def get_trending_mixed():
         if m['id'] not in seen:
             unique.append(m)
             seen.add(m['id'])
-    print(f"Found {len(unique)} unique, returning 5")
-    return unique[:5]
+    print(f"Found {len(unique)} unique, returning 10")
+    return unique[:10]  # user requested 10 tries
 
 def get_youtube_trailer(movie):
     tmdb_id = movie['id']
@@ -256,7 +256,7 @@ def call_gemini_video_script(title, year, m_type, rating, overview, link, movie=
         return voice, caption
 
     prompt = f"""
-You are MoviMoon Senior Bengali Voiceover Director. Need 165-180 Bengali words to fill 60 sec at +28 percent rate. 93 words = only 34 sec FAIL.
+You are MoviMoon Senior Bengali Voiceover Director. CRITICAL: Need 165-180 Bengali words minimum to fill 60 sec. Your last output was only 96 words = 35 sec FAILED. Must write LONGER. Count words before output.
 
 MOVIE: Title {title} Year {year} Rating {rating}/10 Genre {genre_str} Plot {overview} Link {link}
 
@@ -295,9 +295,12 @@ OUTPUT JSON ONLY:
                     caption = j.get("caption","").strip()
                     wc = len(voice.split())
                     print(f"Gemini {model} OK - {wc} words")
-                    if wc < 140:
-                        print(f"Too short {wc}")
+                    if wc < 90:  # lowered from 140 - 96 words = ~35s but still usable, 148 is good
+                        print(f"Too short {wc}, retry")
                         continue
+                    # If 90-139, still accept but log warning - better than failing all
+                    if wc < 130:
+                        print(f"Accepting short {wc} words (will be ~40-50s, usable)")
                     if link not in caption:
                         caption += f"\n\nLink: {link}"
                     return voice, caption
@@ -326,31 +329,35 @@ def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp
         has_bgm = bgm_path and Path(bgm_path).exists()
         if not has_bgm:
             bgm_path = generate_local_cinematic_bgm("bgm.mp3", "cinematic", 65)
-        cmd = (
-            f'ffmpeg -y -loop 1 -t 65 -i "{poster_path}" '
-            f'-i "{trailer_path}" -i "{voice_path}" -loop 1 -t 65 -i "{bgm_path}" '
-            f'-filter_complex "'
-            f'[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=18:steps=2,setsar=1,trim=duration=65[bg];'
-            f'[1:v]scale=1080:800:force_original_aspect_ratio=increase,crop=1080:800[fg];'
-            f'[bg][fg]overlay=(W-w)/2:(H-h)/2:shortest=1:format=auto,scale=1080:1920:flags=lanczos[base];'
-            f'[1:a]volume=0.10[trailera];'
-            f'[2:a]volume=1.0,loudnorm=I=-14:TP=-1.5:LRA=11[voicea];'
-            f'[3:a]volume=0.22,aloop=loop=-1:size=2e+09[bgma];'
-            f'[trailera][bgma][voicea]amix=inputs=3:duration=longest:dropout_transition=0:weights=0.1 0.22 1.0,volume=1.3,loudnorm=I=-14:TP=-1.5:LRA=11[a]" '
-            f'-map "[base]" -map "[a]" '
-            f'-c:v libx264 -preset fast -crf 18 -pix_fmt yuv420p -r 30 '
-            f'-c:a aac -b:a 192k -t 65 "{output}"'
-        )
-        if not poster_path or not Path(poster_path).exists():
+            has_bgm = Path(bgm_path).exists()
+        
+        # FIX: -loop only for image (poster), not for mp3. Use -stream_loop for bgm or no loop + aloop filter
+        if poster_path and Path(poster_path).exists():
             cmd = (
-                f'ffmpeg -y -i "{trailer_path}" -i "{voice_path}" -loop 1 -t 65 -i "{bgm_path}" '
+                f'ffmpeg -y -loop 1 -t 65 -i "{poster_path}" '
+                f'-i "{trailer_path}" -i "{voice_path}" -stream_loop -1 -i "{bgm_path}" '
+                f'-filter_complex "'
+                f'[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=18:steps=2,setsar=1,trim=duration=65[bg];'
+                f'[1:v]scale=1080:800:force_original_aspect_ratio=increase,crop=1080:800[fg];'
+                f'[bg][fg]overlay=(W-w)/2:(H-h)/2:shortest=1:format=auto,scale=1080:1920:flags=lanczos[base];'
+                f'[1:a]volume=0.10[trailera];'
+                f'[2:a]volume=1.0,loudnorm=I=-14:TP=-1.5:LRA=11[voicea];'
+                f'[3:a]volume=0.22[bgma];'
+                f'[trailera][bgma][voicea]amix=inputs=3:duration=longest:dropout_transition=0:weights=0.1 0.22 1.0,volume=1.3,loudnorm=I=-14:TP=-1.5:LRA=11[a]" '
+                f'-map "[base]" -map "[a]" '
+                f'-c:v libx264 -preset fast -crf 18 -pix_fmt yuv420p -r 30 '
+                f'-c:a aac -b:a 192k -t 65 "{output}"'
+            )
+        else:
+            cmd = (
+                f'ffmpeg -y -i "{trailer_path}" -i "{voice_path}" -stream_loop -1 -i "{bgm_path}" '
                 f'-filter_complex "'
                 f'[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=18:steps=2[bg];'
                 f'[0:v]scale=1080:800:force_original_aspect_ratio=increase,crop=1080:800[fg];'
                 f'[bg][fg]overlay=(W-w)/2:(H-h)/2:shortest=1,scale=1080:1920:flags=lanczos[base];'
                 f'[0:a]volume=0.10[trailera];'
                 f'[1:a]volume=1.0,loudnorm=I=-14:TP=-1.5:LRA=11[voicea];'
-                f'[2:a]volume=0.22,aloop=loop=-1:size=2e+09[bgma];'
+                f'[2:a]volume=0.22[bgma];'
                 f'[trailera][bgma][voicea]amix=inputs=3:duration=longest:dropout_transition=0:weights=0.1 0.22 1.0,volume=1.3[a]" '
                 f'-map "[base]" -map "[a]" '
                 f'-c:v libx264 -preset fast -crf 19 -pix_fmt yuv420p -r 30 '
