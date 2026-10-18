@@ -2,13 +2,13 @@ import os, requests, random, re, time, asyncio, json, subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
 
-print("=== MoviMoon Bot Starting - 9:16 HD FINAL VERSION ===")
+print("=== MoviMoon Bot - FINAL PRO 9:16 HD + GENRE BGM + PURE BENGALI ===")
 
 try:
     import edge_tts
-    print("edge_tts imported OK")
+    print("edge_tts OK")
 except Exception as e:
-    print(f"edge_tts import failed: {e}")
+    print(f"edge_tts fail {e}")
     import sys; sys.exit(1)
 
 TMDB_API_KEY = os.getenv("TMDB_API_KEY")
@@ -18,9 +18,9 @@ FB_GROUP_ID = os.getenv("FB_GROUP_ID")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 VOICE = "bn-IN-BashkarNeural"
-RATE = "+28%"  # slower for 1min = more clear
+RATE = "+28%"
 PITCH = "+2Hz"
-VOLUME = "+30%"
+VOLUME = "+35%"
 HISTORY_FILE = "posted_history.json"
 
 def slugify(text):
@@ -61,7 +61,7 @@ def get_trending_mixed():
     current_year = datetime.now().year
     min_year = current_year - 2
     min_date = f"{min_year}-01-01"
-    print(f"Filtering: Only {min_year}+ New + Trending")
+    print(f"Filtering: Only {min_year}+")
     all_results = []
     urls = [
         f"https://api.themoviedb.org/3/trending/movie/day?api_key={TMDB_API_KEY}&language=en-US",
@@ -128,53 +128,39 @@ def get_video_duration(video_path):
 
 def get_cookie_arg():
     if Path("cookies.txt").exists() and Path("cookies.txt").stat().st_size > 100:
-        print(f"Using cookies.txt - {Path('cookies.txt').stat().st_size} bytes")
         return '--cookies cookies.txt'
-    print("No valid cookies.txt - trying without")
     return ''
 
 def download_via_ytdlp_fixed(youtube_url, output="trailer.mp4"):
-    print(f"\n=== YT-DLP HD FIXED for {youtube_url} ===")
+    print(f"\n=== YT-DLP HD for {youtube_url} ===")
     Path(output).unlink(missing_ok=True)
     cookie_arg = get_cookie_arg()
     deno_bin = f"{os.path.expanduser('~')}/.deno/bin/deno"
     js_arg = f"--js-runtimes deno:{deno_bin}" if Path(deno_bin).exists() else "--js-runtimes deno"
-    
-    # UPDATED: Now tries 1080p -> 720p minimum HD
     strategies = [
         f'yt-dlp {cookie_arg} {js_arg} --extractor-args "youtube:player_client=android,web" -f "bestvideo[height>=720][height<=1080][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=1080][ext=mp4]+bestaudio/best[height>=720]" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --force-ipv4',
         f'yt-dlp {cookie_arg} --extractor-args "youtube:player_client=android" -f "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080]" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --force-ipv4',
-        f'yt-dlp {cookie_arg} --extractor-args "youtube:player_client=ios" -f "best[height<=1080]" -o "{output}" "{youtube_url}" --no-playlist --force-ipv4',
         f'yt-dlp {cookie_arg} -f "best[height>=720][ext=mp4]/best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --force-ipv4',
     ]
-    
     for i, cmd in enumerate(strategies, 1):
-        print(f"\n[Strategy {i}/{len(strategies)}] trying HD...")
         try:
             result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=180)
-            if result.stdout: print(f"OUT: {result.stdout[-400:]}")
-            if result.stderr: print(f"ERR: {result.stderr[-600:]}")
             if Path(output).exists() and Path(output).stat().st_size > 50000:
-                print(f"✅ YT-DLP HD SUCCESS {i} - {Path(output).stat().st_size/1024/1024:.2f} MB")
+                print(f"YT-DLP SUCCESS {i} - {Path(output).stat().st_size/1024/1024:.2f} MB")
                 return output
             Path(output).unlink(missing_ok=True)
         except Exception as e:
-            print(f"Strategy {i} exception: {e}")
+            print(f"Strategy {i} err {e}")
             continue
-        time.sleep(2)
-    print("All yt-dlp strategies failed")
     return None
 
 def download_via_cobalt_fixed(youtube_url, output="trailer.mp4"):
-    print(f"\n=== COBALT HD for {youtube_url} ===")
     Path(output).unlink(missing_ok=True)
     instances = ["https://api.cobalt.tools/api/json", "https://co.wuk.sh/api/json"]
     for api in instances:
         try:
-            print(f"Trying {api}")
             payload = {"url": youtube_url, "vCodec": "h264", "vQuality": "1080", "isAudioOnly": False}
             r = requests.post(api, json=payload, headers={"Accept":"application/json","Content-Type":"application/json"}, timeout=20)
-            print(f"Status {r.status_code}: {r.text[:300]}")
             if r.status_code == 200:
                 dl_url = r.json().get("url")
                 if dl_url:
@@ -183,10 +169,9 @@ def download_via_cobalt_fixed(youtube_url, output="trailer.mp4"):
                             for chunk in dl.iter_content(1024*1024):
                                 if chunk: f.write(chunk)
                     if Path(output).exists() and Path(output).stat().st_size > 50000:
-                        print(f"✅ Cobalt HD SUCCESS")
                         return output
         except Exception as e:
-            print(f"Cobalt {api} error {e}")
+            print(f"Cobalt {api} err {e}")
             continue
     return None
 
@@ -195,28 +180,119 @@ def download_trailer(youtube_url, output="trailer.mp4"):
     if res: return res
     res = download_via_cobalt_fixed(youtube_url, output)
     if res: return res
-    print("ALL DOWNLOAD METHODS FAILED")
     return None
 
 def download_movie_poster(movie, output="poster.jpg"):
-    """NEW: Download TMDB poster for 9:16 blurred background"""
     try:
         poster_path = movie.get("poster_path")
         if not poster_path:
-            print("No poster_path")
             return None
         url = f"https://image.tmdb.org/t/p/w780{poster_path}"
-        print(f"Downloading poster: {url}")
         r = requests.get(url, timeout=20)
         if r.status_code == 200:
             with open(output, 'wb') as f:
                 f.write(r.content)
             if Path(output).exists() and Path(output).stat().st_size > 1000:
-                print(f"✅ Poster downloaded {Path(output).stat().st_size/1024:.1f} KB")
                 return output
     except Exception as e:
-        print(f"Poster download error: {e}")
+        print(f"Poster err {e}")
     return None
+
+def get_genre_names(genre_ids):
+    genre_map = {
+        28: "অ্যাকশন", 12: "অ্যাডভেঞ্চার", 16: "অ্যানিমেশন", 35: "কমেডি",
+        80: "ক্রাইম", 99: "ডকুমেন্টারি", 18: "ড্রামা", 10751: "ফ্যামিলি",
+        14: "ফ্যান্টাসি", 36: "ইতিহাস", 27: "হরর", 10402: "মিউজিক",
+        9648: "মিস্ট্রি", 10749: "রোমান্স", 878: "সায়েন্স ফিকশন",
+        10770: "টিভি মুভি", 53: "থ্রিলার", 10752: "ওয়ার", 37: "ওয়েস্টার্ন"
+    }
+    if not genre_ids:
+        return "ড্রামা, থ্রিলার"
+    names = [genre_map.get(g, "") for g in genre_ids[:3] if g in genre_map]
+    return ", ".join(names) if names else "ড্রামা, থ্রিলার"
+
+def ensure_bgm(output="bgm.mp3", movie=None):
+    try:
+        if Path(output).exists() and movie:
+            try: Path(output).unlink()
+            except: pass
+        genre_ids = movie.get("genre_ids", []) if movie else []
+        overview = (movie.get("overview","") + " " + movie.get("title","")).lower() if movie else ""
+        category = "cinematic"
+        if any(g in genre_ids for g in [27, 53, 9648, 80]):
+            category = "suspense"
+        elif any(g in genre_ids for g in [28, 12, 10752, 37]):
+            category = "epic_action"
+        elif any(g in genre_ids for g in [35, 16, 10751]):
+            category = "happy"
+        elif any(g in genre_ids for g in [10749, 18, 36]):
+            category = "emotional"
+        elif any(g in genre_ids for g in [878, 14]):
+            category = "cinematic_futuristic"
+        else:
+            if any(k in overview for k in ["horror", "thrill", "murder", "crime", "mystery", "scary", "ghost"]):
+                category = "suspense"
+            elif any(k in overview for k in ["action", "fight", "war", "battle", "mission"]):
+                category = "epic_action"
+            elif any(k in overview for k in ["love", "romance", "romantic"]):
+                category = "emotional"
+            elif any(k in overview for k in ["comedy", "funny", "laugh"]):
+                category = "happy"
+            elif any(k in overview for k in ["space", "future", "alien", "sci-fi"]):
+                category = "cinematic_futuristic"
+        print(f"BGM Category: {category} for genre_ids {genre_ids}")
+        BGM_LIBRARY = {
+            "epic_action": [
+                "https://cdn.pixabay.com/download/audio/2022/01/13/audio_3633571fb7.mp3?filename=epic-cinematic-trailer-112956.mp3",
+                "https://cdn.pixabay.com/download/audio/2021/08/04/audio_0625c1539c.mp3?filename=epic-110042.mp3",
+                "https://cdn.pixabay.com/download/audio/2022/03/10/audio_c8c8a83be5.mp3?filename=cinematic-time-lapse-115672.mp3",
+            ],
+            "suspense": [
+                "https://cdn.pixabay.com/download/audio/2022/10/30/audio_fbd6d5ddac.mp3?filename=dark-cinematic-ambient-129451.mp3",
+                "https://cdn.pixabay.com/download/audio/2021/09/14/audio_619339fbc7.mp3?filename=dark-ambient-106515.mp3",
+                "https://cdn.pixabay.com/download/audio/2022/03/24/audio_7c8c1a0e13.mp3?filename=suspense-ambient-117551.mp3",
+            ],
+            "emotional": [
+                "https://cdn.pixabay.com/download/audio/2022/06/07/audio_b9bd4170e8.mp3?filename=cinematic-documentary-112669.mp3",
+                "https://cdn.pixabay.com/download/audio/2021/10/25/audio_0556d62dd9.mp3?filename=sad-piano-112199.mp3",
+                "https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07c.mp3?filename=romantic-piano-111914.mp3",
+            ],
+            "happy": [
+                "https://cdn.pixabay.com/download/audio/2022/06/15/audio_a83a4a6b1c.mp3?filename=happy-upbeat-113864.mp3",
+                "https://cdn.pixabay.com/download/audio/2021/08/09/audio_5fc7f9aa97.mp3?filename=happy-background-111196.mp3",
+            ],
+            "cinematic_futuristic": [
+                "https://cdn.pixabay.com/download/audio/2022/03/24/audio_5b7cb1bc5c.mp3?filename=futuristic-ambient-117615.mp3",
+                "https://cdn.pixabay.com/download/audio/2022/10/14/audio_13ef4c7c54.mp3?filename=space-atmosphere-128814.mp3",
+            ],
+            "cinematic": [
+                "https://cdn.pixabay.com/download/audio/2022/03/10/audio_c8c8a83be5.mp3?filename=cinematic-time-lapse-115672.mp3",
+                "https://cdn.pixabay.com/download/audio/2021/11/17/audio_872d32a0d3.mp3?filename=epic-cinematic-ambience-112030.mp3",
+            ]
+        }
+        urls = BGM_LIBRARY.get(category, BGM_LIBRARY["cinematic"])
+        random.shuffle(urls)
+        for url in urls:
+            try:
+                print(f"Downloading {category} BGM...")
+                r = requests.get(url, timeout=40, stream=True, headers={"User-Agent":"Mozilla/5.0"})
+                if r.status_code == 200:
+                    with open(output, 'wb') as f:
+                        for chunk in r.iter_content(32768):
+                            if chunk: f.write(chunk)
+                    if Path(output).exists() and Path(output).stat().st_size > 30000:
+                        print(f"BGM {category} OK {Path(output).stat().st_size/1024:.1f}KB")
+                        return output
+                    Path(output).unlink(missing_ok=True)
+            except Exception as e:
+                print(f"BGM err {e}")
+                continue
+        if category != "cinematic":
+            return ensure_bgm(output, movie=None)
+        return None
+    except Exception as e:
+        print(f"BGM ensure err {e}")
+        return None
 
 def trim_trailer_to_60s(input_path, output_path="trailer_60s.mp4"):
     try:
@@ -226,45 +302,39 @@ def trim_trailer_to_60s(input_path, output_path="trailer_60s.mp4"):
         if Path(output_path).exists(): return output_path
         return input_path
     except Exception as e:
-        print(f"Trim error {e}")
+        print(f"Trim err {e}")
         return input_path
 
-def call_gemini_video_script(title, year, m_type, rating, overview, link):
+def call_gemini_video_script(title, year, m_type, rating, overview, link, movie=None):
+    genre_str = get_genre_names(movie.get("genre_ids", []) if movie else [])
     if not GEMINI_API_KEY:
-        voice = f"বন্ধুরা, কেমন আছেন সবাই? আজকে কথা বলব {year} সালের বহুল আলোচিত সিনেমা {title} নিয়ে। এই সিনেমার গল্পটা এতটাই টানটান উত্তেজনায় ভরা যে একবার দেখা শুরু করলে শেষ না করে উঠতে পারবেন না। প্রধান চরিত্রের অসাধারণ অভিনয়, দুর্দান্ত সিনেমাটোগ্রাফি এবং ব্যাকগ্রাউন্ড মিউজিক আপনাকে এক মুহূর্তের জন্যও বোর হতে দেবে না। বিশেষ করে শেষের টুইস্টটা আপনার মাথা ঘুরিয়ে দেবে। আইএমডিবিতে {rating} রেটিং পাওয়া এই সিনেমাটি যারা থ্রিলার এবং অ্যাকশন পছন্দ করেন তাদের জন্য মাস্ট ওয়াচ। পুরো সিনেমাটির এইচডি প্রিন্ট, বিস্তারিত রিভিউ এবং ডাউনলোড লিংক পেয়ে যাবেন আমাদের ওয়েবসাইট মুভিমুন ডট অনলাইন এ। এখনই ভিজিট করুন।"
-        caption = f"🎬 {title} ({year}) - {rating}/10\n\n{overview[:200]}\n\n👉 ফুল রিভিউ: {link}\n\n#MovieReview #MoviMoon"
+        voice = f"বন্ধুরা কেমন আছেন সবাই আজকে কথা বলবো {year} সালের আলোচিত সিনেমা {title} নিয়ে। বন্ধুরা এই সিনেমার গল্পটা এতটাই টানটান উত্তেজনায় ভরা যে একবার দেখা শুরু করলে শেষ না করে উঠতে পারবেন না। প্রধান চরিত্রের অসাধারণ অভিনয় দুর্দান্ত পরিচালনা এবং আবহ সঙ্গীত আপনাকে এক মুহূর্তের জন্যও বিরক্ত হতে দেবে না। বিশেষ করে গল্পের শেষের চমকটা আপনার মাথা ঘুরিয়ে দেবে। যারা রোমাঞ্চ এবং অ্যাকশন পছন্দ করেন তাদের জন্য এটা অবশ্যই দেখার মতো একটি সিনেমা। পুরো সিনেমাটির বিস্তারিত রিভিউ পেয়ে যাবেন আমাদের ওয়েবসাইট মুভিমুন ডট অনলাইন এ। এখনই ভিজিট করুন। বন্ধুরা এই সিনেমাটি কিন্তু আপনাদের মন ছুঁয়ে যাবে।"
+        caption = f"🎬 Movie - {title} ({year})\n\n🎭 Genre - {genre_str}\n⭐ IMDb Rating - {rating}/10\n📖 Story - {overview[:250]}...\n\n🔗 ফুল মুভি লিংক: {link}\n\n👉 পুরো রিভিউ এবং এইচডি ডাউনলোড পেতে ভিজিট করুন movimoon.online\n\n#MoviMoon #MovieReview #TrendingMovie #BengaliReview"
         return voice, caption
 
     prompt = f"""
-You are MoviMoon's Lead Professional Bengali Movie Critic & Voiceover Script Writer. Your voiceover will be used for EDGE TTS (BashkarNeural, +28% speed). It MUST be exactly 1 minute long.
+You are MoviMoon Bengali Critic. Write 100% PURE BENGALI voiceover, NO ENGLISH. Even movie title MUST be in Bengali phonetic.
 
-MOVIE DATA:
-Title: {title}
+DATA:
+Original Title: {title}
 Year: {year}
-Type: {m_type} (movie/tv)
-Rating: {rating}/10
+Rating: {rating}
+Genre: {genre_str}
 Plot: {overview}
-Site Link: {link}
+Link: {link}
 
-TASK: Write a HIGHLY PROFESSIONAL, CINEMATIC 1-MINUTE voiceover script.
+VOICEOVER RULES:
+1. 100% Bengali only. NO English. Title {title} must be transliterated to Bengali, e.g. Avatar -> অ্যাভাটার, John Wick -> জন উইক.
+2. Forbidden in voiceover: Movie, Story, Action, VFX, BGM, CGI, IMDb, HD, OTT, AI, Rating, Genre - write all in Bengali.
+3. Length: 140 to 160 words EXACT. Count.
+4. Structure: Hook, Story, Acting, Why Watch, CTA with movimoon.online.
+5. Tone natural spoken Bengali for TTS bn-IN-BashkarNeural.
 
-STRICT RULES FOR VOICEOVER (Bengali, 140-160 words, 60 seconds):
-1. Language: Pure natural spoken Bengali (mix of চলিত ভাষা). No English words title alos Bengali.
-2. Length: 140 to 160 words MUST. Count internally. This is for 60 seconds.
-3. Structure (5 parts):
-   - [HOOK 0-8s]: Start with "বন্ধুরা, কেমন আছেন সবাই? আজকে কথা বলব..." or explosive hook about {title}
-   - [STORY 8-25s]: What is the story? Use plot but make it thrilling, don't spoil ending.
-   - [PERFORMANCE & TECH 25-45s]: Talk about Acting, Direction, BGM, VFX, Cinematography. Mention {year} and why it's trending. Mention rating {rating} if >7.
-   - [WHY WATCH 45-53s]: Why should audience watch? Who will love it? (action lovers, family etc)
-   - [CTA 53-60s]: "পুরো সিনেমাটির HD প্রিন্ট, বিস্তারিত রিভিউ এবং ডাউনলোড লিংক পেয়ে যাবেন আমাদের ওয়েবসাইট movimoon.online এ।"
-4. Tone: Professional, exciting, like a top YouTube movie reviewer (think Filmy Duniya). Not robotic.
-5. NO English abbreviations. Write VFX as ভিএফএক্স.
-6. End with invitation to visit site.
-
-OUTPUT FORMAT: Valid JSON ONLY. No markdown.
+OUTPUT JSON ONLY:
 {{
-"voiceover": "Here will be 140-160 words Bengali voiceover, exactly 1 minute long...",
-"caption": "Here write a VIRAL Facebook caption in Bengali: Line 1: Title with emoji 🎬🔥, Line 2: Rating + Year, Line 3: 2-line hook, Line 4: Call to action with link {link}, Line 5: 8-10 hashtags like #MoviMoon #MovieReview #NewMovie #BengaliReview #Trending. Include link compulsorily."
+"voiceover": "140-160 words pure Bengali, no English, title in Bengali phonetic...",
+"bangla_title": "Title in Bengali phonetic",
+"caption": "🎬 Movie - {title} ({year})\\n\\n🎭 Genre - {genre_str}\\n⭐ IMDb Rating - {rating}/10\\n📖 Story - [Bengali 30 words]\\n\\n[hook line Bengali]\\n\\n🔗 ফুল মুভি লিংক: {link}\\n\\n👉 পুরো রিভিউ এবং এইচডি ডাউনলোড পেতে ভিজিট করুন movimoon.online\\n\\n#MoviMoon #MovieReview #TrendingNow #MustWatch #BengaliReview #ViralReels"
 }}
 """
     models = [
@@ -279,8 +349,8 @@ OUTPUT FORMAT: Valid JSON ONLY. No markdown.
     for model in models:
         try:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
-            data = {"contents":[{"parts":[{"text":prompt}]}], "generationConfig":{"temperature":0.8}}
-            res = requests.post(url, json=data, timeout=45)
+            data = {"contents":[{"parts":[{"text":prompt}]}], "generationConfig":{"temperature":0.85, "maxOutputTokens": 2000}}
+            res = requests.post(url, json=data, timeout=60)
             if res.status_code == 200:
                 text = res.json()["candidates"][0]["content"]["parts"][0]["text"]
                 m = re.search(r'\{.*\}', text, re.DOTALL)
@@ -289,20 +359,30 @@ OUTPUT FORMAT: Valid JSON ONLY. No markdown.
                     voice = j.get("voiceover","").strip()
                     caption = j.get("caption","").strip()
                     if voice and caption:
-                        if link not in caption: caption += f"\n\n👉 ফুল রিভিউ: {link}"
-                        print(f"Gemini {model} OK - {len(voice.split())} words")
+                        wc = len(voice.split())
+                        print(f"Gemini {model} OK - {wc} words - {j.get('bangla_title','')}")
+                        if link not in caption:
+                            caption += f"\n\n🔗 ফুল মুভি লিংক: {link}"
                         return voice, caption
-            print(f"Gemini {model} failed: {res.status_code} {res.text[:300]}")
+            print(f"Gemini {model} fail {res.status_code} {res.text[:400]}")
         except Exception as e:
-            print(f"Gemini {model} error: {e}")
+            print(f"Gemini {model} err {e}")
             continue
     return None, None
 
 async def generate_tts_voice(text, output_path="voice.mp3"):
-    replacements = {"VFX": "ভিএফএক্স", "AI": "এ আই", "OTT": "ওটিটি", "BGM": "বিজিএম", "CGI": "সিজিআই", "IMDb": "আইএমডিবি"}
-    for en, bn in replacements.items():
+    # Pure Bengali cleaning - ensure no English words for clear pronunciation
+    # Replace common English terms with Bengali
+    repl = {
+        "VFX": "ভিজুয়াল এফেক্ট", "AI": "কৃত্রিম বুদ্ধিমত্তা", "BGM": "আবহ সঙ্গীত",
+        "CGI": "কম্পিউটার গ্রাফিক্স", "IMDb": "রেটিং", "IMDB": "রেটিং",
+        "OTT": "ওটিটি", "HD": "এইচডি", "4K": "ফোর কে"
+    }
+    for en, bn in repl.items():
         text = text.replace(en, bn)
-    print(f"TTS: {len(text.split())} words - target 1min")
+    # Remove any remaining isolated English words (keep Bengali only)
+    # We keep it simple - Gemini already gives pure Bengali, this is extra safety
+    print(f"TTS: {len(text.split())} words - RATE +28% - Pure Bengali check")
     communicate = edge_tts.Communicate(text, VOICE, rate=RATE, pitch=PITCH, volume=VOLUME)
     await communicate.save(output_path)
     try:
@@ -314,67 +394,84 @@ async def generate_tts_voice(text, output_path="voice.mp3"):
         pass
     return output_path
 
-def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp4"):
-    """
-    NEW 9:16 HD LOGIC:
-    - Canvas: 1080x1920 (Full HD vertical)
-    - Background: Blurred poster filling full canvas
-    - Foreground: Trailer centered (16:9) on blurred background
-    - Audio: trailer low + voice loud, 720p+ HD
-    """
+def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp4", bgm_path=None):
     try:
         if Path(output).exists(): Path(output).unlink()
-        
-        # Check if poster exists, if not use trailer blurred as background
+        has_bgm = bgm_path and Path(bgm_path).exists()
+        print(f"BGM: {'YES' if has_bgm else 'NO'}")
         if poster_path and Path(poster_path).exists():
-            print(f"Creating 9:16 HD with poster background: {poster_path}")
-            # Use poster as blurred background
-            cmd = (
-                f'ffmpeg -y -loop 1 -t 60 -i "{poster_path}" '
-                f'-i "{trailer_path}" -i "{voice_path}" '
-                f'-filter_complex "'
-                f'[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=35:steps=2,setsar=1,trim=duration=60[bg];'
-                f'[1:v]scale=1080:608:force_original_aspect_ratio=decrease[fg];'
-                f'[bg][fg]overlay=(W-w)/2:(H-h)/2:shortest=1:format=auto,scale=1080:1920:flags=lanczos[base];'
-                f'[1:a]volume=0.12[trailera];'
-                f'[2:a]volume=1.0,loudnorm=I=-14:TP=-1.5:LRA=11[voicea];'
-                f'[trailera][voicea]amix=inputs=2:duration=shortest:dropout_transition=0,volume=1.2[a]" '
-                f'-map "[base]" -map "[a]" '
-                f'-c:v libx264 -preset fast -crf 19 -pix_fmt yuv420p -r 30 '
-                f'-c:a aac -b:a 192k -shortest -t 65 "{output}"'
-            )
+            if has_bgm:
+                cmd = (
+                    f'ffmpeg -y -loop 1 -t 65 -i "{poster_path}" '
+                    f'-i "{trailer_path}" -i "{voice_path}" -loop 1 -t 65 -i "{bgm_path}" '
+                    f'-filter_complex "'
+                    f'[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=18:steps=2,setsar=1,trim=duration=65[bg];'
+                    f'[1:v]scale=1080:800:force_original_aspect_ratio=increase,crop=1080:800[fg];'
+                    f'[bg][fg]overlay=(W-w)/2:(H-h)/2:shortest=1:format=auto,scale=1080:1920:flags=lanczos[base];'
+                    f'[1:a]volume=0.10[trailera];'
+                    f'[2:a]volume=1.0,loudnorm=I=-14:TP=-1.5:LRA=11[voicea];'
+                    f'[3:a]volume=0.18,aloop=loop=-1:size=2e+09[bgma];'
+                    f'[trailera][bgma][voicea]amix=inputs=3:duration=shortest:dropout_transition=0:weights=0.1 0.18 1.0,volume=1.3,loudnorm=I=-14:TP=-1.5:LRA=11[a]" '
+                    f'-map "[base]" -map "[a]" '
+                    f'-c:v libx264 -preset fast -crf 18 -pix_fmt yuv420p -r 30 '
+                    f'-c:a aac -b:a 192k -shortest -t 65 "{output}"'
+                )
+            else:
+                cmd = (
+                    f'ffmpeg -y -loop 1 -t 60 -i "{poster_path}" '
+                    f'-i "{trailer_path}" -i "{voice_path}" '
+                    f'-filter_complex "'
+                    f'[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=18:steps=2,setsar=1,trim=duration=60[bg];'
+                    f'[1:v]scale=1080:800:force_original_aspect_ratio=increase,crop=1080:800[fg];'
+                    f'[bg][fg]overlay=(W-w)/2:(H-h)/2:shortest=1:format=auto,scale=1080:1920:flags=lanczos[base];'
+                    f'[1:a]volume=0.12[trailera];'
+                    f'[2:a]volume=1.0,loudnorm=I=-14:TP=-1.5:LRA=11[voicea];'
+                    f'[trailera][voicea]amix=inputs=2:duration=shortest:dropout_transition=0,volume=1.2[a]" '
+                    f'-map "[base]" -map "[a]" '
+                    f'-c:v libx264 -preset fast -crf 19 -pix_fmt yuv420p -r 30 '
+                    f'-c:a aac -b:a 192k -shortest -t 65 "{output}"'
+                )
         else:
-            print("Poster not found, using trailer blurred background for 9:16")
-            # Fallback: use trailer itself blurred as background
-            cmd = (
-                f'ffmpeg -y -i "{trailer_path}" -i "{voice_path}" '
-                f'-filter_complex "'
-                f'[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=25:steps=2[bg];'
-                f'[0:v]scale=1080:608:force_original_aspect_ratio=decrease[fg];'
-                f'[bg][fg]overlay=(W-w)/2:(H-h)/2:shortest=1,scale=1080:1920:flags=lanczos[base];'
-                f'[0:a]volume=0.12[trailera];'
-                f'[1:a]volume=1.0,loudnorm=I=-14:TP=-1.5:LRA=11[voicea];'
-                f'[trailera][voicea]amix=inputs=2:duration=shortest:dropout_transition=0,volume=1.2[a]" '
-                f'-map "[base]" -map "[a]" '
-                f'-c:v libx264 -preset fast -crf 19 -pix_fmt yuv420p -r 30 '
-                f'-c:a aac -b:a 192k -shortest -t 65 "{output}"'
-            )
-        
-        print(f"FFmpeg 9:16 HD cmd: {cmd[:300]}...")
+            if has_bgm:
+                cmd = (
+                    f'ffmpeg -y -i "{trailer_path}" -i "{voice_path}" -loop 1 -t 65 -i "{bgm_path}" '
+                    f'-filter_complex "'
+                    f'[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=18:steps=2[bg];'
+                    f'[0:v]scale=1080:800:force_original_aspect_ratio=increase,crop=1080:800[fg];'
+                    f'[bg][fg]overlay=(W-w)/2:(H-h)/2:shortest=1,scale=1080:1920:flags=lanczos[base];'
+                    f'[0:a]volume=0.10[trailera];'
+                    f'[1:a]volume=1.0,loudnorm=I=-14:TP=-1.5:LRA=11[voicea];'
+                    f'[2:a]volume=0.18,aloop=loop=-1:size=2e+09[bgma];'
+                    f'[trailera][bgma][voicea]amix=inputs=3:duration=shortest:dropout_transition=0:weights=0.1 0.18 1.0,volume=1.3[a]" '
+                    f'-map "[base]" -map "[a]" '
+                    f'-c:v libx264 -preset fast -crf 19 -pix_fmt yuv420p -r 30 '
+                    f'-c:a aac -b:a 192k -shortest -t 65 "{output}"'
+                )
+            else:
+                cmd = (
+                    f'ffmpeg -y -i "{trailer_path}" -i "{voice_path}" '
+                    f'-filter_complex "'
+                    f'[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=18:steps=2[bg];'
+                    f'[0:v]scale=1080:800:force_original_aspect_ratio=increase,crop=1080:800[fg];'
+                    f'[bg][fg]overlay=(W-w)/2:(H-h)/2:shortest=1,scale=1080:1920:flags=lanczos[base];'
+                    f'[0:a]volume=0.12[trailera];'
+                    f'[1:a]volume=1.0,loudnorm=I=-14:TP=-1.5:LRA=11[voicea];'
+                    f'[trailera][voicea]amix=inputs=2:duration=shortest:dropout_transition=0,volume=1.2[a]" '
+                    f'-map "[base]" -map "[a]" '
+                    f'-c:v libx264 -preset fast -crf 19 -pix_fmt yuv420p -r 30 '
+                    f'-c:a aac -b:a 192k -shortest -t 65 "{output}"'
+                )
+        print(f"FFmpeg 9:16 HD PRO +28%...")
         result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=180)
-        print(f"FFmpeg out: {result.stdout[-500:] if result.stdout else 'no out'}")
-        print(f"FFmpeg err: {result.stderr[-800:] if result.stderr else 'no err'}")
-        
         if Path(output).exists() and Path(output).stat().st_size > 50000:
-            dur = get_video_duration(output)
-            # Verify resolution
             probe_cmd = f'ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=WxH "{output}"'
             probe_res = subprocess.run(probe_cmd, shell=True, capture_output=True, text=True)
-            print(f"✅ Final 9:16 HD video: {probe_res.stdout.strip()} - {dur:.1f}s - {Path(output).stat().st_size/1024/1024:.2f} MB")
+            print(f"Final 9:16 HD: {probe_res.stdout.strip()} - {Path(output).stat().st_size/1024/1024:.2f} MB")
             return output
+        print(f"FFmpeg err {result.stderr[-800:]}")
         return None
     except Exception as e:
-        print(f"9:16 FFmpeg Error: {e}")
+        print(f"9:16 Error {e}")
         import traceback; traceback.print_exc()
         return None
 
@@ -402,24 +499,21 @@ def build_movimoon_link(movie):
         return f"https://movimoon.online/movie/{tmdb_id}-{slug}", "movie"
 
 def main():
-    print("=== MAIN START - 9:16 HD MODE ===")
+    print("=== MAIN START - 9:16 HD + GENRE BGM + PURE BENGALI +28% ===")
     history = load_history()
-    print(f"History loaded: {len(history)} items")
     items = get_trending_mixed()
-    print(f"Found {len(items)} recent items")
+    print(f"Found {len(items)} items")
     if not items:
-        print("No items found, exit")
         return
     for movie in items:
         try:
             tmdb_id = str(movie.get('id'))
             title_raw = movie.get('title') or movie.get('name') or "Unknown"
-            print(f"\n>>> Processing: {title_raw} ({tmdb_id}) - 9:16 HD")
+            print(f"\n>>> Processing: {title_raw} ({tmdb_id})")
             if is_already_posted(tmdb_id, history, days=30):
                 print(f"SKIPPED: {title_raw}")
                 continue
             yt_url, yt_key = get_youtube_trailer(movie)
-            print(f"Trailer URL: {yt_url}")
             if not yt_url:
                 print(f"No trailer for {title_raw}")
                 continue
@@ -428,62 +522,49 @@ def main():
             rating = round(movie.get("vote_average",0), 1)
             overview = movie.get("overview","")[:600]
             link, m_type = build_movimoon_link(movie)
-            voice_text, caption = call_gemini_video_script(title, year, m_type, rating, overview, link)
+            voice_text, caption = call_gemini_video_script(title, year, m_type, rating, overview, link, movie=movie)
             if not voice_text or not caption:
-                print(f"Gemini failed for {title_raw}, trying next...")
+                print(f"Gemini failed for {title_raw}")
                 continue
-            
-            # Download HD trailer (720p minimum)
             trailer_file = download_trailer(yt_url, "trailer.mp4")
             if not trailer_file:
-                print(f"Download failed for {title_raw}, next...")
                 continue
-            
-            # NEW: Download poster for blurred background
             poster_file = download_movie_poster(movie, "poster.jpg")
-            
+            bgm_file = ensure_bgm("bgm.mp3", movie=movie)
             trailer_60s = trim_trailer_to_60s(trailer_file, "trailer_60s.mp4")
             asyncio.run(generate_tts_voice(voice_text, "voice.mp3"))
-            
-            # NEW: Create 9:16 HD final video
-            final_video = create_9_16_hd_video(trailer_60s, poster_file, "voice.mp3", "final.mp4")
-            
+            final_video = create_9_16_hd_video(trailer_60s, poster_file, "voice.mp3", "final.mp4", bgm_path=bgm_file)
             if not final_video or not os.path.exists(final_video):
-                print("9:16 Merge failed")
+                print("Merge failed")
                 continue
             success = False
             if FB_PAGE_ID and FB_PAGE_TOKEN:
                 resp = upload_video_to_facebook(FB_PAGE_ID, FB_PAGE_TOKEN, final_video, caption, "PAGE")
                 if resp and resp.status_code == 200:
                     success = True
-                    print("PAGE SUCCESS - 9:16 HD")
-                else:
-                    print(f"PAGE FAILED: {resp.text[:300] if resp else 'No response'}")
+                    print("PAGE SUCCESS")
             if FB_GROUP_ID and FB_PAGE_TOKEN and success:
                 try:
                     time.sleep(3)
                     resp2 = upload_video_to_facebook(FB_GROUP_ID, FB_PAGE_TOKEN, final_video, caption, "GROUP")
                     if resp2 and resp2.status_code == 200:
                         print("GROUP SUCCESS")
-                    else:
-                        print(f"GROUP SKIP: {resp2.text[:200] if resp2 else 'No response'}")
                 except Exception as ge:
-                    print(f"GROUP error (skip): {ge}")
+                    print(f"GROUP err {ge}")
             if success:
                 history[tmdb_id] = datetime.now().isoformat()
                 save_history(history)
-            for f in ["trailer.mp4","trailer_60s.mp4","voice.mp3","final.mp4","poster.jpg"]:
+            for f in ["trailer.mp4","trailer_60s.mp4","voice.mp3","final.mp4","poster.jpg","bgm.mp3"]:
                 if os.path.exists(f):
                     try: os.remove(f)
                     except: pass
-            print("Done 1 video 9:16 HD, exiting.")
+            print("Done 1 video, exiting.")
             break
         except Exception as e:
             print(f"MAIN ERROR: {e}")
-            import traceback
-            traceback.print_exc()
+            import traceback; traceback.print_exc()
             continue
-    print("=== MAIN END - 9:16 HD ===")
+    print("=== MAIN END ===")
 
 if __name__ == "__main__":
     main()
