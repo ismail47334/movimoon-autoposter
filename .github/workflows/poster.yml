@@ -1,4 +1,4 @@
-name: MoviMoon Video AutoPoster - FIXED 2026
+name: MoviMoon Video AutoPoster - FINAL FIXED 2026-10-18
 
 on:
   schedule:
@@ -20,42 +20,38 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install FFmpeg + Deno + yt-dlp (FIXED)
+      - name: Install FFmpeg + Deno + yt-dlp (FINAL)
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg
-          
-          # Install Deno - Required for PO Token bypass
           curl -fsSL https://deno.land/install.sh | sh
           echo "$HOME/.deno/bin" >> $GITHUB_PATH
           export DENO_INSTALL="$HOME/.deno"
           export PATH="$DENO_INSTALL/bin:$PATH"
           $HOME/.deno/bin/deno --version
-          
-          # Install with default + ejs (critical for bot bypass)
           pip install -r requirements.txt
-          pip install -U "yt-dlp[default]"
-          pip install -U yt-dlp-ejs
+          pip install -U "yt-dlp[default]" yt-dlp-ejs
           yt-dlp --version
 
-      - name: Create cookies.txt + Verify
+      - name: Create cookies.txt (FIXED - preserve format)
         env:
           YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
         run: |
           if [ -n "$YOUTUBE_COOKIES" ]; then
-            echo "$YOUTUBE_COOKIES" > cookies.txt
-            # Ensure Netscape format header exists
-            if ! head -n1 cookies.txt | grep -q "# Netscape"; then
-              echo "# Netscape HTTP Cookie File" | cat - cookies.txt > temp && mv temp cookies.txt
+            printf "%s" "$YOUTUBE_COOKIES" > cookies.txt
+            # If file doesn't start with Netscape header, it's probably JSON - convert not possible, keep as is and try
+            if head -n1 cookies.txt | grep -q "http_cookie"; then
+              echo "Cookies in JSON format detected - converting attempt"
             fi
-            echo "cookies.txt created - size $(wc -c < cookies.txt) bytes"
-            head -n 5 cookies.txt
+            echo "cookies.txt size: $(wc -c < cookies.txt) bytes, lines: $(wc -l < cookies.txt)"
+            head -c 200 cookies.txt
+            echo ""
           else
-            echo "No cookies secret found - will try without cookies"
+            echo "No YOUTUBE_COOKIES secret"
           fi
           ls -lh
 
-      - name: Run HD Video Autoposter
+      - name: Run HD Video Autoposter (DEBUG MODE)
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
           FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
@@ -65,12 +61,17 @@ jobs:
         run: |
           export DENO_INSTALL="$HOME/.deno"
           export PATH="$DENO_INSTALL/bin:$PATH"
-          python movimoon-video-autoposter.py
+          echo "=== Python version ==="
+          python --version
+          echo "=== Files ==="
+          ls -lh
+          echo "=== Starting Python ==="
+          python -u movimoon-video-autoposter.py
 
       - name: Commit posted history
         run: |
           git config --global user.name 'MoviMoon Bot'
           git config --global user.email 'bot@movimoon.online'
           git add posted_history.json || echo "No history"
-          git diff --staged --quiet || git commit -m "Update posted history FIXED [skip ci]"
+          git diff --staged --quiet || git commit -m "Update history [skip ci]"
           git push || echo "No changes"
