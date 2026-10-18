@@ -223,7 +223,7 @@ def call_gemini_video_script(title, year, m_type, rating, overview, link):
 
     # MASTER PROMPT FOR 1-MINUTE PROFESSIONAL VOICEOVER (140-150 WORDS = 60 SEC)
     prompt = f"""
-You are MoviMoon's Lead Professional Bengali Movie Critic & Voiceover Script Writer. Your voiceover will be used for TTS (BashkarNeural, +28% speed). It MUST be exactly 1 minute long.
+You are MoviMoon's Lead Professional Bengali Movie Critic & Voiceover Script Writer. Your voiceover will be used for EDGE TTS (BashkarNeural, +28% speed). It MUST be exactly 1 minute long.
 
 MOVIE DATA:
 Title: {title}
@@ -236,7 +236,7 @@ Site Link: {link}
 TASK: Write a HIGHLY PROFESSIONAL, CINEMATIC 1-MINUTE voiceover script.
 
 STRICT RULES FOR VOICEOVER (Bengali, 135-150 words, 60 seconds):
-1. Language: Pure natural spoken Bengali (mix of চলিত ভাষা). No English words except title.
+1. Language: Pure natural spoken Bengali (mix of চলিত ভাষা). No English words even title will be Bengali, for pure Bengali sound.
 2. Length: 135 to 150 words MUST. Count internally. This is for 60 seconds.
 3. Structure (5 parts):
    - [HOOK 0-8s]: Start with "বন্ধুরা, কেমন আছেন সবাই? আজকে কথা বলব..." or explosive hook about {title}
