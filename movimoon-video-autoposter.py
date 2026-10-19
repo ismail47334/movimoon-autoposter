@@ -310,14 +310,52 @@ def smart_trim_trailer_to_60s(input_path, output_path="trailer_60s.mp4"):
         import traceback; traceback.print_exc()
         return input_path
 
+
 def call_groq_fallback(movie_title, year, m_type, rating, overview, link, genre_str):
     if not GROQ_API_KEY or not GROQ_AVAILABLE:
         print("Groq not available")
         return None, None, None
     try:
         client = Groq(api_key=GROQ_API_KEY)
-        groq_prompt = f"You are Senior Bengali Voiceover Director for MoviMoon. MUST write 165-180 Bengali words. INPUT Title {movie_title} Year {year} Rating {rating}/10 Genre {genre_str} Plot {overview} Link {link}. STRUCTURE HOOK 30 words, PLOT 60 words 5 sentences, ACTING 55 words 4 sentences, CTA 30 words. Total 175 words TARGET. LANGUAGE 100% Pure Bengali using । , ! ?. OUTPUT JSON ONLY with voiceover 175 words Bengali, story_bn 30 words, bangla_title."
-        # Try multiple Groq models - llama-3.3-70b-versatile deprecated, try new ones
+        title = movie_title
+        prompt = f"""You are the Senior Bengali Voiceover Director & Lead Scriptwriter for MoviMoon.
+Your core objective is to write an engaging, dramatic, and precise 60-second Bengali video narration script based on the provided movie details.
+
+### CRITICAL REQUIREMENTS (WORD COUNT):
+- STRICT WORD COUNT: EXACTLY between 165 and 180 Bengali words. 
+- UNDER NO CIRCUMSTANCES should the word count be less than 165 words (Short scripts cause audio timing failure).
+- Do a strict self-count before generating the final JSON response.
+
+### INPUT DATA:
+- Movie Title: {title}
+- Release Year: {year}
+- Rating: {rating}/10
+- Genre: {genre_str}
+- Overview/Plot: {overview}
+- Movie Link: {link}
+
+### SCRIPT STRUCTURE & TIMING BREAKDOWN:
+1. HOOK (0-10s) -> [28 to 30 words]: High energy opening to grab attention instantly.
+2. STORY PLOT (10-30s) -> [55 to 60 words]: Brief, intriguing core synopsis without spoilers.
+3. ACTING & VISUALS (30-50s) -> [50 to 55 words]: Critique of performance, direction, atmosphere, or climax setup.
+4. CALL TO ACTION / OUTRO (50-60s) -> [25 to 30 words]: Wrap up with rating mention and direct audience to watch on MoviMoon via the link.
+
+### LANGUAGE RULES:
+1. 100% Pure Bengali text using proper Bengali punctuation (। , ! ?).
+2. NO English words, letters, or numbers in the "voiceover" text (Transliterate English titles/numbers into Bengali, e.g., 8.5 -> ৮.৫ or সাড়ে আট).
+3. Transliterate the movie title cleanly into Bengali for "bangla_title".
+4. Tone: Energetic, dramatic, and professional cinema narrator voice.
+
+### REQUIRED OUTPUT FORMAT:
+Return ONLY a valid, raw JSON object. Do NOT include markdown code blocks, explanations, or extra text.
+
+{{
+  "voiceover": "১৬৫ থেকে ১৮০ শব্দের পূর্ণাঙ্গ বাংলা ভয়েসওভার টেক্সট...",
+  "bangla_title": "বাংলায় মুভির নাম",
+  "caption": "আকর্ষণীয় সোশ্যাল মিডিয়া ক্যাপশন উইথ হ্যাশট্যাগ",
+  "word_count": 172
+}}"""
+        groq_prompt = prompt
         groq_models = ["llama-3.3-70b-versatile", "llama-3.1-70b-versatile", "llama-3.1-8b-instant", "openai/gpt-oss-20b", "openai/gpt-oss-120b", "mixtral-8x7b-32768"]
         completion = None
         last_err = None
@@ -343,12 +381,9 @@ def call_groq_fallback(movie_title, year, m_type, rating, overview, link, genre_
         print(f"Groq raw: {content[:500]}")
         j = json.loads(content)
         voice = j.get("voiceover","").strip()
-        story_bn = j.get("story_bn","").strip()
+        story_bn = j.get("caption","").strip() or j.get("story_bn","").strip()
         wc = len(voice.split())
         print(f"Groq SUCCESS - {wc} words")
-        if wc < 100:
-            print(f"Groq short {wc}, expanding")
-            voice = voice + " এই সিনেমার প্রতিটি দৃশ্য অসাধারণভাবে সাজানো হয়েছে। পরিচালকের মুন্সিয়ানা এবং অভিনেতাদের দুর্দান্ত অভিনয় আপনাকে মুগ্ধ করবে। গল্পের প্রতিটি মোড়ে রয়েছে চমক এবং উত্তেজনা। শেষ পর্যন্ত দেখার মতো একটি দুর্দান্ত সিনেমা। এখনই দেখুন মুভিমুনে ভিজিট করে।"
         if not story_bn:
             story_bn = f"{overview[:100]} এক অসাধারণ গল্প!"
         return voice, story_bn, j.get("bangla_title", movie_title)
@@ -362,8 +397,94 @@ def call_gemini_video_script(title, year, m_type, rating, overview, link, movie=
     title_raw = title
     if not GEMINI_API_KEY and not GROQ_API_KEY:
         story_bn = "এক অসাধারণ রহস্যময় গল্পের জগত! বাবার মৃত্যুর পর এক তরুণী নানা প্রতিকূলতার মুখোমুখি হয়।"
-        voice = f"বন্ধুরা কেমন আছেন সবাই আজকে কথা বলবো {year} সালের আলোচিত সিনেমা নিয়ে। এই সিনেমার গল্পটা এতটাই টানটান উত্তেজনায় ভরা যে একবার দেখা শুরু করলে শেষ না করে উঠতে পারবেন না। প্রধান চরিত্রের অসাধারণ অভিনয় দুর্দান্ত পরিচালনা এবং আবহ সঙ্গীত আপনাকে এক মুহূর্তের জন্যও বিরক্ত হতে দেবে না। বিশেষ করে গল্পের শেষের চমকটা আপনার মাথা ঘুরিয়ে দেবে। যারা রোমাঞ্চ এবং অ্যাকশন পছন্দ করেন তাদের জন্য এটা অবশ্যই দেখার মতো একটি সিনেমা। পুরো সিনেমাটির বিস্তারিত রিভিউ পেয়ে যাবেন আমাদের ওয়েবসাইট মুভিমুন ডট অনলাইন এ। এখনই ভিজিট করুন। বন্ধুরা এই সিনেমাটি কিন্তু আপনাদের মন ছুঁয়ে যাবে। এই গল্পের প্রতিটা মুহূর্ত আপনাকে আটকে রাখবে শেষ পর্যন্ত।"
+        voice = f"বন্ধুরা কেমন আছেন সবাই আজকে কথা বলবো {year} সালের আলোচিত সিনেমা নিয়ে।"
         return voice, story_bn, title_raw
+
+    prompt = f"""You are the Senior Bengali Voiceover Director & Lead Scriptwriter for MoviMoon.
+Your core objective is to write an engaging, dramatic, and precise 60-second Bengali video narration script based on the provided movie details.
+
+### CRITICAL REQUIREMENTS (WORD COUNT):
+- STRICT WORD COUNT: EXACTLY between 165 and 180 Bengali words. 
+- UNDER NO CIRCUMSTANCES should the word count be less than 165 words (Short scripts cause audio timing failure).
+- Do a strict self-count before generating the final JSON response.
+
+### INPUT DATA:
+- Movie Title: {title}
+- Release Year: {year}
+- Rating: {rating}/10
+- Genre: {genre_str}
+- Overview/Plot: {overview}
+- Movie Link: {link}
+
+### SCRIPT STRUCTURE & TIMING BREAKDOWN:
+1. HOOK (0-10s) -> [28 to 30 words]: High energy opening to grab attention instantly.
+2. STORY PLOT (10-30s) -> [55 to 60 words]: Brief, intriguing core synopsis without spoilers.
+3. ACTING & VISUALS (30-50s) -> [50 to 55 words]: Critique of performance, direction, atmosphere, or climax setup.
+4. CALL TO ACTION / OUTRO (50-60s) -> [25 to 30 words]: Wrap up with rating mention and direct audience to watch on MoviMoon via the link.
+
+### LANGUAGE RULES:
+1. 100% Pure Bengali text using proper Bengali punctuation (। , ! ?).
+2. NO English words, letters, or numbers in the "voiceover" text (Transliterate English titles/numbers into Bengali, e.g., 8.5 -> ৮.৫ or সাড়ে আট).
+3. Transliterate the movie title cleanly into Bengali for "bangla_title".
+4. Tone: Energetic, dramatic, and professional cinema narrator voice.
+
+### REQUIRED OUTPUT FORMAT:
+Return ONLY a valid, raw JSON object. Do NOT include markdown code blocks, explanations, or extra text.
+
+{{
+  "voiceover": "১৬৫ থেকে ১৮০ শব্দের পূর্ণাঙ্গ বাংলা ভয়েসওভার টেক্সট...",
+  "bangla_title": "বাংলায় মুভির নাম",
+  "caption": "আকর্ষণীয় সোশ্যাল মিডিয়া ক্যাপশন উইথ হ্যাশট্যাগ",
+  "word_count": 172
+}}"""
+
+    models = [
+        "gemini-3.5-flash-lite", 
+        "gemini-3.5-flash",
+    ]
+    for model in models:
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
+            data = {"contents":[{"parts":[{"text":prompt}]}], "generationConfig":{"temperature":1.0, "topP":0.95, "topK":40, "maxOutputTokens": 4096}}
+            res = requests.post(url, json=data, timeout=30)
+            if res.status_code == 200:
+                js = res.json()
+                try:
+                    text = js["candidates"][0]["content"]["parts"][0]["text"]
+                except:
+                    print(f"{model} no text")
+                    continue
+                clean_text = text.replace("```json","").replace("```","").strip()
+                m = re.search(r'\{.*\}', clean_text, re.DOTALL)
+                if m:
+                    j = json.loads(m.group())
+                    voice = j.get("voiceover","").strip()
+                    story_bn = j.get("caption","").strip() or j.get("story_bn","").strip()
+                    wc = len(voice.split())
+                    print(f"Gemini {model} OK - {wc} words story: {story_bn[:60]}")
+                    if wc < 140:
+                        print(f"Too short {wc} - required 165, skipping")
+                        continue
+                    if not story_bn:
+                        story_bn = f"{overview[:120]} এক অসাধারণ গল্পের জগত!"
+                    return voice, story_bn, j.get("bangla_title", title_raw)
+                else:
+                    print(f"{model} no JSON")
+            else:
+                print(f"Gemini {model} fail {res.status_code} {res.text[:200]}")
+        except Exception as e:
+            print(f"Gemini {model} err {e}")
+            continue
+
+    print("All Gemini models failed, trying Groq fallback...")
+    groq_voice, groq_story, groq_title = call_groq_fallback(title_raw, year, m_type, rating, overview, link, genre_str)
+    if groq_voice:
+        return groq_voice, groq_story, groq_title
+
+    story_bn = "এক অসাধারণ রহস্যময় গল্পের জগত!"
+    voice = f"বন্ধুরা আজকে কথা বলবো {year} সালের সিনেমা {title_raw} নিয়ে।"
+    return voice, story_bn, title_raw
+
 
     gemini_prompt = f"You are the Senior Bengali Voiceover Director for MoviMoon. You MUST write 165-180 Bengali words. Shorter than 165 is FAILURE - audio will fail. CRITICAL: Count words. Need 175 words. INPUT Movie {title_raw} Year {year} Rating {rating}/10 Genre {genre_str} Plot {overview} Link {link}. WRITE 4 PARAGRAPHS Paragraph1 HOOK 30 words energetic opening with movie name. Paragraph2 PLOT 60 words detailed story 5 sentences no spoilers. Paragraph3 ACTING 55 words performance direction music cinematography climax 4 sentences. Paragraph4 CTA 30 words rating mention watch on MoviMoon. LANGUAGE 100 percent Pure Bengali using । , ! ?. Also provide story_bn 30 words Bengali story summary. OUTPUT ONLY JSON with voiceover 175 words Bengali text, bangla_title Bengali title, story_bn 30 words, word_count 175."
 
