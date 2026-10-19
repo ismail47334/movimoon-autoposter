@@ -2,7 +2,7 @@ import os, requests, random, re, time, asyncio, json, subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
 
-print("=== MoviMoon Bot - MASTER V13 GROQ+GEMINI 165WORDS FIX ===")
+print("=== MoviMoon Bot - FINAL V18 STABLE | VOICE 100% TRAILER 30% | GEMINI 3.5 + GROQ FALLBACK + 165WORDS GUARANTEED ===")
 
 try:
     import edge_tts
@@ -586,11 +586,16 @@ Return ONLY a valid, raw JSON object. Do NOT include markdown code blocks, expla
 
 def build_caption(title, year, m_type, genre_str, rating, story_bn, link):
     type_label = "Series" if m_type == "tv" else "Movie"
-    caption = f"🎬 {type_label} - {title}({year})\n🎭 Genres - {genre_str}\n⭐ Rating - {rating}/10\n📖 Story - {story_bn}\nএক অসাধারণ রহস্যময় গল্পের জগত!\n🔗 ফুল মুভি লিংক: {link}\n👉 পুরো রিভিউ এবং ডাউনলোড পেতে ভিজিট করুন movimoon.online\n#MoviMoon #MovieReview #TrendingNow #MustWatch #BengaliReview #ViralReels\n#S #{title.replace(' ', '').replace('-', '')}"
+    # story_bn may already be full caption from Gemini
+    if len(story_bn) > 100 or "#" in story_bn:
+        story_text = story_bn
+    else:
+        story_text = f"📖 Story - {story_bn}\nএক অসাধারণ রহস্যময় গল্পের জগত!"
+    caption = f"🎬 {type_label} - {title}({year})\n🎭 Genres - {genre_str}\n⭐ Rating - {rating}/10\n{story_text}\n🔗 ফুল মুভি লিংক: {link}\n👉 পুরো রিভিউ এবং ডাউনলোড পেতে ভিজিট করুন movimoon.online\n#MoviMoon #MovieReview #TrendingNow #MustWatch #BengaliReview #ViralReels\n#S #{title.replace(' ', '').replace('-', '')}"
     return caption
 
 async def generate_tts_voice(text, output_path="voice.mp3"):
-    print(f"TTS: {len(text.split())} words RATE +28% PRO STUDIO V13 NO ROBOTIC")
+    print(f"TTS: {len(text.split())} words RATE +28% PRO STUDIO V18 VOICE 100% TRAILER 30%")
     communicate = edge_tts.Communicate(text, VOICE, rate=RATE, pitch=PITCH, volume=VOLUME)
     await communicate.save(output_path)
     try:
@@ -620,7 +625,7 @@ def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp
             bgm_path = generate_local_cinematic_bgm("bgm.mp3", "cinematic", duration=trailer_duration)
             has_bgm = Path(bgm_path).exists()
         dur = int(trailer_duration)
-        print(f"Creating {dur}s video V13 SIDECHAIN DUCKING - BGM auto ducks when voice speaks")
+        print(f"Creating {dur}s video FINAL V18 - Voice 100% Trailer 30% BGM ducks when voice speaks")
         if poster_path and Path(poster_path).exists():
             cmd = (
                 f'ffmpeg -y -loop 1 -t {dur} -i "{poster_path}" '
@@ -629,11 +634,11 @@ def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp
                 f'[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=20:steps=2,setsar=1,trim=duration={dur}[bg];'
                 f'[1:v]scale=1080:800:force_original_aspect_ratio=increase,crop=1080:800[fg];'
                 f'[bg][fg]overlay=(W-w)/2:(H-h)/2:shortest=1:format=auto,scale=1080:1920:flags=lanczos[base];'
-                f'[1:a]volume=0.08[trailer_low];'
+                f'[1:a]volume=0.30[trailer_low];'
                 f'[3:a]volume=0.40[bg_vol];'
                 f'[2:a]asplit=2[voice_sc][voice_mix];'
                 f'[bg_vol][voice_sc]sidechaincompress=threshold=0.015:ratio=8:attack=20:release=400:makeup=1[ducked];'
-                f'[trailer_low][ducked][voice_mix]amix=inputs=3:duration=longest:dropout_transition=0:weights=0.08 0.35 1,volume=1.25,loudnorm=I=-16:TP=-1.5:LRA=8[a]" '
+                f'[trailer_low][ducked][voice_mix]amix=inputs=3:duration=longest:dropout_transition=0:weights=0.30 0.35 1,volume=1.25,loudnorm=I=-16:TP=-1.5:LRA=8[a]" '
                 f'-map "[base]" -map "[a]" '
                 f'-c:v libx264 -preset fast -crf 18 -pix_fmt yuv420p -r 30 '
                 f'-c:a aac -b:a 192k -t {dur} "{output}"'
@@ -645,28 +650,28 @@ def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp
                 f'[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=20:steps=2[bg];'
                 f'[0:v]scale=1080:800:force_original_aspect_ratio=increase,crop=1080:800[fg];'
                 f'[bg][fg]overlay=(W-w)/2:(H-h)/2:shortest=1,scale=1080:1920:flags=lanczos[base];'
-                f'[0:a]volume=0.08[trailer_low];'
+                f'[0:a]volume=0.30[trailer_low];'
                 f'[2:a]volume=0.40[bg_vol];'
                 f'[1:a]asplit=2[voice_sc][voice_mix];'
                 f'[bg_vol][voice_sc]sidechaincompress=threshold=0.015:ratio=8:attack=20:release=400:makeup=1[ducked];'
-                f'[trailer_low][ducked][voice_mix]amix=inputs=3:duration=longest:dropout_transition=0:weights=0.08 0.35 1,volume=1.25,loudnorm=I=-16:TP=-1.5:LRA=8[a]" '
+                f'[trailer_low][ducked][voice_mix]amix=inputs=3:duration=longest:dropout_transition=0:weights=0.30 0.35 1,volume=1.25,loudnorm=I=-16:TP=-1.5:LRA=8[a]" '
                 f'-map "[base]" -map "[a]" '
                 f'-c:v libx264 -preset fast -crf 19 -pix_fmt yuv420p -r 30 '
                 f'-c:a aac -b:a 192k -t {dur} "{output}"'
             )
-        print(f"FFmpeg V13 SIDECHAIN DUCKING {dur}s...")
+        print(f"FFmpeg FINAL V18 - Voice 100% Trailer 30% {dur}s...")
         result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=180)
         if Path(output).exists() and Path(output).stat().st_size > 50000:
-            print(f"Final OK V13 {Path(output).stat().st_size/1024/1024:.2f} MB {get_video_duration(output):.1f}s - Voice clear, BGM ducks automatically")
+            print(f"Final OK V18 Voice 100% Trailer 30% {Path(output).stat().st_size/1024/1024:.2f} MB {get_video_duration(output):.1f}s - Voice clear, BGM ducks automatically")
             return output
         print(f"FFmpeg err {result.stderr[-1000:]}")
         fallback_cmd = (
             f'ffmpeg -y -loop 1 -t {dur} -i "{poster_path}" -i "{trailer_path}" -i "{voice_path}" -stream_loop -1 -i "{bgm_path}" '
-            f'-filter_complex "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=18[bg];[1:v]scale=1080:800[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2[base];[1:a]volume=0.08[tl];[3:a]volume=0.30[bgv];[2:a]volume=1.0[vo];[tl][bgv][vo]amix=inputs=3:duration=longest:weights=0.08 0.30 1,volume=1.2[a]" '
+            f'-filter_complex "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=18[bg];[1:v]scale=1080:800[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2[base];[1:a]volume=0.30[tl];[3:a]volume=0.30[bgv];[2:a]volume=1.0[vo];[tl][bgv][vo]amix=inputs=3:duration=longest:weights=0.30 0.30 1,volume=1.2[a]" '
             f'-map "[base]" -map "[a]" -c:v libx264 -preset fast -crf 18 -pix_fmt yuv420p -r 30 -c:a aac -b:a 192k -t {dur} "{output}"'
         ) if poster_path and Path(poster_path).exists() else (
             f'ffmpeg -y -i "{trailer_path}" -i "{voice_path}" -stream_loop -1 -i "{bgm_path}" '
-            f'-filter_complex "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=18[bg];[0:v]scale=1080:800[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2[base];[0:a]volume=0.08[tl];[2:a]volume=0.30[bgv];[1:a]volume=1.0[vo];[tl][bgv][vo]amix=inputs=3:duration=longest:weights=0.08 0.30 1,volume=1.2[a]" '
+            f'-filter_complex "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=18[bg];[0:v]scale=1080:800[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2[base];[0:a]volume=0.30[tl];[2:a]volume=0.30[bgv];[1:a]volume=1.0[vo];[tl][bgv][vo]amix=inputs=3:duration=longest:weights=0.30 0.30 1,volume=1.2[a]" '
             f'-map "[base]" -map "[a]" -c:v libx264 -preset fast -crf 19 -pix_fmt yuv420p -r 30 -c:a aac -b:a 192k -t {dur} "{output}"'
         )
         subprocess.run(fallback_cmd, shell=True, capture_output=True, timeout=180)
@@ -702,7 +707,7 @@ def build_movimoon_link(movie):
         return f"https://movimoon.online/movie/{tmdb_id}-{slug}", "movie"
 
 def main():
-    print("=== MAIN START V13 GROQ+GEMINI 165WORDS FIX ===")
+    print("=== MAIN START FINAL V18 VOICE 100% TRAILER 30% ===")
     history = load_history()
     items = get_trending_mixed()
     print(f"Found {len(items)} items")
