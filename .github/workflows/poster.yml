@@ -1,4 +1,4 @@
-name: MoviMoon Video AutoPoster - FINAL FIXED 2026-10-18
+name: MoviMoon Video AutoPoster - V12 GROQ FALLBACK
 
 on:
   schedule:
@@ -30,7 +30,7 @@ jobs:
           export PATH="$DENO_INSTALL/bin:$PATH"
           $HOME/.deno/bin/deno --version
           pip install -r requirements.txt
-          pip install -U "yt-dlp[default]" yt-dlp-ejs
+          pip install -U "yt-dlp[default]" yt-dlp-ejs groq
           yt-dlp --version
 
       - name: Create cookies.txt
@@ -52,10 +52,11 @@ jobs:
           FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}
           FB_GROUP_ID: ${{ secrets.FB_GROUP_ID }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: |
           export DENO_INSTALL="$HOME/.deno"
           export PATH="$DENO_INSTALL/bin:$PATH"
-          python -u movimoon-video-autoposter.py
+          python -u movimoon-video-autoposter-FINAL.py || python -u movimoon-video-autoposter.py
 
       - name: Commit posted history
         run: |
