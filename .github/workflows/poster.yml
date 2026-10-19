@@ -1,4 +1,4 @@
-name: MoviMoon Video AutoPoster - V12 GROQ FALLBACK
+name: MoviMoon Video AutoPoster - FINAL V19 TEXT EFFECT | VOICE 100% TRAILER 30% + TITLE + movimoon.online
 
 on:
   schedule:
@@ -20,10 +20,11 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install FFmpeg + Deno + yt-dlp
+      - name: Install FFmpeg + Deno + yt-dlp + Fonts
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg
+          sudo apt-get install -y ffmpeg fonts-dejavu-core fonts-noto-core
+          fc-list | head -20
           curl -fsSL https://deno.land/install.sh | sh
           echo "$HOME/.deno/bin" >> $GITHUB_PATH
           export DENO_INSTALL="$HOME/.deno"
