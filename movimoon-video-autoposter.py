@@ -350,13 +350,52 @@ def call_gemini_video_script(title, year, m_type, rating, overview, link, movie=
         voice = f"বন্ধুরা কেমন আছেন সবাই আজকে কথা বলবো {year} সালের আলোচিত সিনেমা নিয়ে। এই সিনেমার গল্পটা এতটাই টানটান উত্তেজনায় ভরা যে একবার দেখা শুরু করলে শেষ না করে উঠতে পারবেন না। প্রধান চরিত্রের অসাধারণ অভিনয় দুর্দান্ত পরিচালনা এবং আবহ সঙ্গীত আপনাকে এক মুহূর্তের জন্যও বিরক্ত হতে দেবে না। বিশেষ করে গল্পের শেষের চমকটা আপনার মাথা ঘুরিয়ে দেবে। যারা রোমাঞ্চ এবং অ্যাকশন পছন্দ করেন তাদের জন্য এটা অবশ্যই দেখার মতো একটি সিনেমা। পুরো সিনেমাটির বিস্তারিত রিভিউ পেয়ে যাবেন আমাদের ওয়েবসাইট মুভিমুন ডট অনলাইন এ। এখনই ভিজিট করুন। বন্ধুরা এই সিনেমাটি কিন্তু আপনাদের মন ছুঁয়ে যাবে। এই গল্পের প্রতিটা মুহূর্ত আপনাকে আটকে রাখবে শেষ পর্যন্ত।"
         return voice, story_bn, title_raw
 
-    gemini_prompt = f"You are the Senior Bengali Voiceover Director for MoviMoon. You MUST write 165-180 Bengali words. Shorter than 165 is FAILURE - audio will fail. CRITICAL: Count words. Need 175 words. INPUT Movie {title_raw} Year {year} Rating {rating}/10 Genre {genre_str} Plot {overview} Link {link}. WRITE 4 PARAGRAPHS Paragraph1 HOOK 30 words energetic opening with movie name. Paragraph2 PLOT 60 words detailed story 5 sentences no spoilers. Paragraph3 ACTING 55 words performance direction music cinematography climax 4 sentences. Paragraph4 CTA 30 words rating mention watch on MoviMoon. LANGUAGE 100 percent Pure Bengali using । , ! ?. Also provide story_bn 30 words Bengali story summary. OUTPUT ONLY JSON with voiceover 175 words Bengali text, bangla_title Bengali title, story_bn 30 words, word_count 175."
+    gemini_prompt = f"""You are the Senior Bengali Voiceover Director & Lead Scriptwriter for MoviMoon.
+Your core objective is to write an engaging, dramatic, and precise 60-second Bengali video narration script based on the provided movie details.
 
-    models = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.0-flash-lite", "gemini-flash-latest"]
+### CRITICAL REQUIREMENTS (WORD COUNT):
+- STRICT WORD COUNT: EXACTLY between 165 and 180 Bengali words. 
+- UNDER NO CIRCUMSTANCES should the word count be less than 165 words (Short scripts cause audio timing failure).
+- Do a strict self-count before generating the final JSON response.
+
+### INPUT DATA:
+- Movie Title: {title}
+- Release Year: {year}
+- Rating: {rating}/10
+- Genre: {genre_str}
+- Overview/Plot: {overview}
+- Movie Link: {link}
+
+### SCRIPT STRUCTURE & TIMING BREAKDOWN:
+1. HOOK (0-10s) -> [28 to 30 words]: High energy opening to grab attention instantly.
+2. STORY PLOT (10-30s) -> [55 to 60 words]: Brief, intriguing core synopsis without spoilers.
+3. ACTING & VISUALS (30-50s) -> [50 to 55 words]: Critique of performance, direction, atmosphere, or climax setup.
+4. CALL TO ACTION / OUTRO (50-60s) -> [25 to 30 words]: Wrap up with rating mention and direct audience to watch on MoviMoon via the link.
+
+### LANGUAGE RULES:
+1. 100% Pure Bengali text using proper Bengali punctuation (। , ! ?).
+2. NO English words, letters, or numbers in the "voiceover" text (Transliterate English titles/numbers into Bengali, e.g., 8.5 -> ৮.৫ or সাড়ে আট).
+3. Transliterate the movie title cleanly into Bengali for "bangla_title".
+4. Tone: Energetic, dramatic, and professional cinema narrator voice.
+
+### REQUIRED OUTPUT FORMAT:
+Return ONLY a valid, raw JSON object. Do NOT include markdown code blocks, explanations, or extra text.
+
+{{
+  "voiceover": "১৬৫ থেকে ১৮০ শব্দের পূর্ণাঙ্গ বাংলা ভয়েসওভার টেক্সট...",
+  "bangla_title": "বাংলায় মুভির নাম",
+  "caption": "আকর্ষণীয় সোশ্যাল মিডিয়া ক্যাপশন উইথ হ্যাশট্যাগ",
+  "word_count": 172
+}}"""
+
+    models = [
+        "gemini-3.5-flash-lite", 
+        "gemini-3.5-flash",
+    ]
     for model in models:
         try:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
-            data = {"contents":[{"parts":[{"text":gemini_prompt}]}], "generationConfig":{"temperature":1.0, "topP":0.95, "topK":40, "maxOutputTokens": 4096}}
+            data = {"contents":[{"parts":[{"text":prompt}]}], "generationConfig":{"temperature":1.0, "topP":0.95, "topK":40, "maxOutputTokens": 4096}}
             res = requests.post(url, json=data, timeout=30)
             if res.status_code == 200:
                 js = res.json()
