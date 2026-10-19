@@ -616,7 +616,19 @@ async def generate_tts_voice(text, output_path="voice.mp3"):
         import traceback; traceback.print_exc()
     return output_path
 
-def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp4", bgm_path=None, trailer_duration=60):
+
+def sanitize_drawtext(text):
+    if not text:
+        return "Movie"
+    text = str(text)
+    for ch in ["'", '"', ":", "\n", "\r"]:
+        text = text.replace(ch, " ")
+    text = " ".join(text.split())
+    if len(text) > 40:
+        text = text[:37] + "..."
+    return text.strip() or "Movie"
+
+def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp4", bgm_path=None, trailer_duration=60, title_text="MoviMoon"):
     try:
         if Path(output).exists():
             Path(output).unlink()
@@ -625,7 +637,8 @@ def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp
             bgm_path = generate_local_cinematic_bgm("bgm.mp3", "cinematic", duration=trailer_duration)
             has_bgm = Path(bgm_path).exists()
         dur = int(trailer_duration)
-        print(f"Creating {dur}s video FINAL V18 - Voice 100% Trailer 30% BGM ducks when voice speaks")
+        safe_title = sanitize_drawtext(title_text)
+        print(f"Creating {dur}s video FINAL V19 TEXT EFFECT - Title: {safe_title} | Voice 100% Trailer 30%")
         if poster_path and Path(poster_path).exists():
             cmd = (
                 f'ffmpeg -y -loop 1 -t {dur} -i "{poster_path}" '
@@ -634,12 +647,16 @@ def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp
                 f'[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=20:steps=2,setsar=1,trim=duration={dur}[bg];'
                 f'[1:v]scale=1080:800:force_original_aspect_ratio=increase,crop=1080:800[fg];'
                 f'[bg][fg]overlay=(W-w)/2:(H-h)/2:shortest=1:format=auto,scale=1080:1920:flags=lanczos[base];'
+                f'[base]drawtext=text={safe_title}:fontcolor=white:fontsize=58:box=1:boxcolor=black@0.55:boxborderw=12:borderw=3:bordercolor=black:'
+                f'x=(w-text_w)/2:y=180:alpha=if(lt(t,0.5),0,if(lt(t,1.5),(t-0.5),if(gt(t,58),60-t,1))):shadowcolor=black:shadowx=3:shadowy=3[base_top];'
+                f'[base_top]drawtext=text=movimoon.online:fontcolor=yellow:fontsize=46:box=1:boxcolor=black@0.6:boxborderw=10:borderw=2:bordercolor=black:'
+                f'x=(w-text_w)/2:y=h-180:alpha=if(lt(t,1),0,if(lt(t,2),(t-1),1)):shadowcolor=black:shadowx=2:shadowy=2[final_v];'
                 f'[1:a]volume=0.30[trailer_low];'
                 f'[3:a]volume=0.40[bg_vol];'
                 f'[2:a]asplit=2[voice_sc][voice_mix];'
                 f'[bg_vol][voice_sc]sidechaincompress=threshold=0.015:ratio=8:attack=20:release=400:makeup=1[ducked];'
                 f'[trailer_low][ducked][voice_mix]amix=inputs=3:duration=longest:dropout_transition=0:weights=0.30 0.35 1,volume=1.25,loudnorm=I=-16:TP=-1.5:LRA=8[a]" '
-                f'-map "[base]" -map "[a]" '
+                f'-map "[final_v]" -map "[a]" '
                 f'-c:v libx264 -preset fast -crf 18 -pix_fmt yuv420p -r 30 '
                 f'-c:a aac -b:a 192k -t {dur} "{output}"'
             )
@@ -650,21 +667,26 @@ def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp
                 f'[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=20:steps=2[bg];'
                 f'[0:v]scale=1080:800:force_original_aspect_ratio=increase,crop=1080:800[fg];'
                 f'[bg][fg]overlay=(W-w)/2:(H-h)/2:shortest=1,scale=1080:1920:flags=lanczos[base];'
+                f'[base]drawtext=text={safe_title}:fontcolor=white:fontsize=58:box=1:boxcolor=black@0.55:boxborderw=12:borderw=3:bordercolor=black:'
+                f'x=(w-text_w)/2:y=180:alpha=if(lt(t,0.5),0,if(lt(t,1.5),(t-0.5),if(gt(t,58),60-t,1))):shadowcolor=black:shadowx=3:shadowy=3[base_top];'
+                f'[base_top]drawtext=text=movimoon.online:fontcolor=yellow:fontsize=46:box=1:boxcolor=black@0.6:boxborderw=10:borderw=2:bordercolor=black:'
+                f'x=(w-text_w)/2:y=h-180:alpha=if(lt(t,1),0,if(lt(t,2),(t-1),1)):shadowcolor=black:shadowx=2:shadowy=2[final_v];'
                 f'[0:a]volume=0.30[trailer_low];'
                 f'[2:a]volume=0.40[bg_vol];'
                 f'[1:a]asplit=2[voice_sc][voice_mix];'
                 f'[bg_vol][voice_sc]sidechaincompress=threshold=0.015:ratio=8:attack=20:release=400:makeup=1[ducked];'
                 f'[trailer_low][ducked][voice_mix]amix=inputs=3:duration=longest:dropout_transition=0:weights=0.30 0.35 1,volume=1.25,loudnorm=I=-16:TP=-1.5:LRA=8[a]" '
-                f'-map "[base]" -map "[a]" '
+                f'-map "[final_v]" -map "[a]" '
                 f'-c:v libx264 -preset fast -crf 19 -pix_fmt yuv420p -r 30 '
                 f'-c:a aac -b:a 192k -t {dur} "{output}"'
             )
-        print(f"FFmpeg FINAL V18 - Voice 100% Trailer 30% {dur}s...")
+        print(f"FFmpeg FINAL V19 TEXT EFFECT {dur}s...")
         result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=180)
         if Path(output).exists() and Path(output).stat().st_size > 50000:
-            print(f"Final OK V18 Voice 100% Trailer 30% {Path(output).stat().st_size/1024/1024:.2f} MB {get_video_duration(output):.1f}s - Voice clear, BGM ducks automatically")
+            print(f"Final OK V19 TEXT {Path(output).stat().st_size/1024/1024:.2f} MB")
             return output
-        print(f"FFmpeg err {result.stderr[-1000:]}")
+        print(f"FFmpeg err {result.stderr[-800:]}")
+        print("Fallback without text...")
         fallback_cmd = (
             f'ffmpeg -y -loop 1 -t {dur} -i "{poster_path}" -i "{trailer_path}" -i "{voice_path}" -stream_loop -1 -i "{bgm_path}" '
             f'-filter_complex "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=18[bg];[1:v]scale=1080:800[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2[base];[1:a]volume=0.30[tl];[3:a]volume=0.30[bgv];[2:a]volume=1.0[vo];[tl][bgv][vo]amix=inputs=3:duration=longest:weights=0.30 0.30 1,volume=1.2[a]" '
@@ -679,9 +701,10 @@ def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp
             return output
         return None
     except Exception as e:
-        print(f"V13 Error {e}")
+        print(f"V19 Error {e}")
         import traceback; traceback.print_exc()
         return None
+
 
 def upload_video_to_facebook(page_id, token, video_path, caption, label):
     try:
@@ -745,7 +768,7 @@ def main():
             bgm_file = ensure_bgm("bgm.mp3", movie=movie, duration=int(trailer_dur))
             asyncio.run(generate_tts_voice(voice_text, "voice.mp3"))
             print(f"Voice {get_video_duration('voice.mp3'):.1f}s Trailer {trailer_dur:.1f}s BGM {get_video_duration(bgm_file):.1f}s")
-            final_video = create_9_16_hd_video(trailer_60s, poster_file, "voice.mp3", "final.mp4", bgm_path=bgm_file, trailer_duration=int(trailer_dur))
+            final_video = create_9_16_hd_video(trailer_60s, poster_file, "voice.mp3", "final.mp4", bgm_path=bgm_file, trailer_duration=int(trailer_dur), title_text=title_raw)
             if not final_video:
                 continue
             success = False
