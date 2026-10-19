@@ -1,8 +1,16 @@
 import os, requests, random, re, time, asyncio, json, subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
+# Groq fallback
+try:
+    from groq import Groq
+    GROQ_AVAILABLE = True
+    print("Groq SDK available")
+except ImportError:
+    GROQ_AVAILABLE = False
+    print("Groq not installed - pip install groq")
 
-print("=== MoviMoon Bot - MASTER V10 CAPTION+BGM+SMARTCUT ===")
+print("=== MoviMoon Bot - MASTER V12 GROQ+GEMINI SIDECHAIN ===")
 
 try:
     import edge_tts
@@ -16,6 +24,7 @@ FB_PAGE_ID = os.getenv("FB_PAGE_ID")
 FB_PAGE_TOKEN = os.getenv("FB_PAGE_TOKEN")
 FB_GROUP_ID = os.getenv("FB_GROUP_ID")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 VOICE = "bn-IN-BashkarNeural"
 RATE = "+28%"
@@ -319,29 +328,30 @@ def smart_trim_trailer_to_60s(input_path, output_path="trailer_60s.mp4"):
         import traceback; traceback.print_exc()
         return input_path
 
-def call_gemini_video_script(title, year, m_type, rating, overview, link, movie=None):
-    genre_str = get_genre_names(movie.get("genre_ids", []) if movie else [], english=True)
-    title_raw = title
-    
-    if not GEMINI_API_KEY:
-        # Fallback caption in new format
-        story_bn = "এক অসাধারণ রহস্যময় গল্পের জগত! বাবার মৃত্যুর পর এক তরুণী নানা প্রতিকূলতার মুখোমুখি হয়।"
-        voice = f"বন্ধুরা কেমন আছেন সবাই আজকে কথা বলবো {year} সালের আলোচিত সিনেমা নিয়ে। এই সিনেমার গল্পটা এতটাই টানটান উত্তেজনায় ভরা যে একবার দেখা শুরু করলে শেষ না করে উঠতে পারবেন না। প্রধান চরিত্রের অসাধারণ অভিনয় দুর্দান্ত পরিচালনা এবং আবহ সঙ্গীত আপনাকে এক মুহূর্তের জন্যও বিরক্ত হতে দেবে না। বিশেষ করে গল্পের শেষের চমকটা আপনার মাথা ঘুরিয়ে দেবে। যারা রোমাঞ্চ এবং অ্যাকশন পছন্দ করেন তাদের জন্য এটা অবশ্যই দেখার মতো একটি সিনেমা। পুরো সিনেমাটির বিস্তারিত রিভিউ পেয়ে যাবেন আমাদের ওয়েবসাইট মুভিমুন ডট অনলাইন এ। এখনই ভিজিট করুন। বন্ধুরা এই সিনেমাটি কিন্তু আপনাদের মন ছুঁয়ে যাবে। এই গল্পের প্রতিটা মুহূর্ত আপনাকে আটকে রাখবে শেষ পর্যন্ত।"
-        caption = f"🎬 {'Series' if m_type=='tv' else 'Movie'} - {title_raw}({year})\n🎭 Genres - {genre_str}\n⭐ Rating - {rating}/10\n📖 Story - {story_bn}\n🔗 ফুল মুভি লিংক: {link}\n👉 পুরো রিভিউ এবং ডাউনলোড পেতে ভিজিট করুন movimoon.online\n#MoviMoon #MovieReview #TrendingNow #MustWatch #BengaliReview #ViralReels\n#S #{title_raw.replace(' ', '')}"
-        return voice, caption, story_bn
-
-    prompt = f"""
-You are the Senior Bengali Voiceover Director & Lead Scriptwriter for MoviMoon.
-Your core objective is to write an engaging, dramatic, and precise 60-second Bengali video narration script based on the provided movie/series details.
+def call_groq_fallback(title, year, m_type, rating, overview, link, genre_str):
+    """Groq llama-3.3-70b-versatile fallback when Gemini fails"""
+    if not GROQ_API_KEY or not GROQ_AVAILABLE:
+        print("Groq not available - no API key or SDK")
+        return None, None, None
+    try:
+        client = Groq(api_key=GROQ_API_KEY)
+        prompt = f"""You are the Senior Bengali Voiceover Director & Lead Scriptwriter for MoviMoon.
+Your core objective is to write an engaging, dramatic, and precise 60-second Bengali video narration script based on the provided movie details.
 
 ### CRITICAL REQUIREMENTS (WORD COUNT):
 - STRICT WORD COUNT: EXACTLY between 165 and 180 Bengali words. 
 - UNDER NO CIRCUMSTANCES should the word count be less than 165 words (Short scripts cause audio timing failure).
 - Do a strict self-count before generating the final JSON response.
 
-MOVIE: Title {title_raw} Year {year} Rating {rating}/10 Type {m_type} Genres {genre_str} Plot {overview} Link {link}
+### INPUT DATA:
+- Movie Title: {title_raw}
+- Release Year: {year}
+- Rating: {rating}/10
+- Genre: {genre_str}
+- Overview/Plot: {overview}
+- Movie Link: {link}
 
-TASKS:
+### SCRIPT STRUCTURE & TIMING BREAKDOWN:
 1. HOOK (0-10s) -> [28 to 30 words]: High energy opening to grab attention instantly.
 2. STORY PLOT (10-30s) -> [55 to 60 words]: Brief, intriguing core synopsis without spoilers.
 3. ACTING & VISUALS (30-50s) -> [50 to 55 words]: Critique of performance, direction, atmosphere, or climax setup.
@@ -353,16 +363,94 @@ TASKS:
 3. Transliterate the movie title cleanly into Bengali for "bangla_title".
 4. Tone: Energetic, dramatic, and professional cinema narrator voice.
 
+### ADDITIONAL FOR CAPTION:
+- Also provide "story_bn": 25-35 words Bengali story summary for social caption, e.g., বাবার মৃত্যুর পর এক তরুণী হাই স্কুলে নানা বুলিংয়ের শিকার হয় এবং তার ভেতরে রহস্যময় ক্ষমতা জেগে ওঠে।
+
 ### REQUIRED OUTPUT FORMAT:
 Return ONLY a valid, raw JSON object. Do NOT include markdown code blocks, explanations, or extra text.
-OUTPUT JSON ONLY:
+
 {{
-"voiceover": "165-180 words pure Bengali...",
-"bangla_title": "Title in Bengali",
-"story_bn": "25-35 words Bengali story summary from plot",
-"word_count": 170
-}}
-"""
+  "voiceover": "১৬৫ থেকে ১৮০ শব্দের পূর্ণাঙ্গ বাংলা ভয়েসওভার টেক্সট...",
+  "bangla_title": "বাংলায় মুভির নাম",
+  "story_bn": "২৫ থেকে ৩৫ শব্দের বাংলা গল্প সারাংশ",
+  "word_count": 172
+}}"""
+
+        completion = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.9,
+            max_tokens=2000,
+            response_format={"type": "json_object"}
+        )
+        content = completion.choices[0].message.content
+        print(f"Groq raw: {content[:400]}")
+        j = json.loads(content)
+        voice = j.get("voiceover","").strip()
+        story_bn = j.get("story_bn","").strip()
+        wc = len(voice.split())
+        print(f"Groq SUCCESS - {wc} words story: {story_bn[:50]}")
+        if wc < 150:
+            print(f"Groq too short {wc}")
+            return None, None, None
+        if not story_bn:
+            story_bn = f"{overview[:100]} এক অসাধারণ গল্প!"
+        return voice, story_bn, j.get("bangla_title", title)
+    except Exception as e:
+        print(f"Groq error: {e}")
+        import traceback; traceback.print_exc()
+        return None, None, None
+
+def call_gemini_video_script(title, year, m_type, rating, overview, link, movie=None):
+    genre_str = get_genre_names(movie.get("genre_ids", []) if movie else [], english=True)
+    title_raw = title
+    
+    if not GEMINI_API_KEY and not GROQ_API_KEY:
+        story_bn = "এক অসাধারণ রহস্যময় গল্পের জগত! বাবার মৃত্যুর পর এক তরুণী নানা প্রতিকূলতার মুখোমুখি হয়।"
+        voice = f"বন্ধুরা কেমন আছেন সবাই আজকে কথা বলবো {year} সালের আলোচিত সিনেমা নিয়ে। এই সিনেমার গল্পটা এতটাই টানটান উত্তেজনায় ভরা যে একবার দেখা শুরু করলে শেষ না করে উঠতে পারবেন না। প্রধান চরিত্রের অসাধারণ অভিনয় দুর্দান্ত পরিচালনা এবং আবহ সঙ্গীত আপনাকে এক মুহূর্তের জন্যও বিরক্ত হতে দেবে না। বিশেষ করে গল্পের শেষের চমকটা আপনার মাথা ঘুরিয়ে দেবে। যারা রোমাঞ্চ এবং অ্যাকশন পছন্দ করেন তাদের জন্য এটা অবশ্যই দেখার মতো একটি সিনেমা। পুরো সিনেমাটির বিস্তারিত রিভিউ পেয়ে যাবেন আমাদের ওয়েবসাইট মুভিমুন ডট অনলাইন এ। এখনই ভিজিট করুন। বন্ধুরা এই সিনেমাটি কিন্তু আপনাদের মন ছুঁয়ে যাবে। এই গল্পের প্রতিটা মুহূর্ত আপনাকে আটকে রাখবে শেষ পর্যন্ত।"
+        return voice, story_bn, title_raw
+
+    prompt = f"""You are the Senior Bengali Voiceover Director & Lead Scriptwriter for MoviMoon.
+Your core objective is to write an engaging, dramatic, and precise 60-second Bengali video narration script based on the provided movie details.
+
+### CRITICAL REQUIREMENTS (WORD COUNT):
+- STRICT WORD COUNT: EXACTLY between 165 and 180 Bengali words. 
+- UNDER NO CIRCUMSTANCES should the word count be less than 165 words (Short scripts cause audio timing failure).
+- Do a strict self-count before generating the final JSON response.
+
+### INPUT DATA:
+- Movie Title: {title_raw}
+- Release Year: {year}
+- Rating: {rating}/10
+- Genre: {genre_str}
+- Overview/Plot: {overview}
+- Movie Link: {link}
+
+### SCRIPT STRUCTURE & TIMING BREAKDOWN:
+1. HOOK (0-10s) -> [28 to 30 words]: High energy opening to grab attention instantly.
+2. STORY PLOT (10-30s) -> [55 to 60 words]: Brief, intriguing core synopsis without spoilers.
+3. ACTING & VISUALS (30-50s) -> [50 to 55 words]: Critique of performance, direction, atmosphere, or climax setup.
+4. CALL TO ACTION / OUTRO (50-60s) -> [25 to 30 words]: Wrap up with rating mention and direct audience to watch on MoviMoon via the link.
+
+### LANGUAGE RULES:
+1. 100% Pure Bengali text using proper Bengali punctuation (। , ! ?).
+2. NO English words, letters, or numbers in the "voiceover" text (Transliterate English titles/numbers into Bengali, e.g., 8.5 -> ৮.৫ or সাড়ে আট).
+3. Transliterate the movie title cleanly into Bengali for "bangla_title".
+4. Tone: Energetic, dramatic, and professional cinema narrator voice.
+
+### ADDITIONAL FOR CAPTION:
+- Also provide "story_bn": 25-35 words Bengali story summary for social caption, e.g., বাবার মৃত্যুর পর এক তরুণী হাই স্কুলে নানা বুলিংয়ের শিকার হয় এবং তার ভেতরে রহস্যময় ক্ষমতা জেগে ওঠে।
+
+### REQUIRED OUTPUT FORMAT:
+Return ONLY a valid, raw JSON object. Do NOT include markdown code blocks, explanations, or extra text.
+
+{{
+  "voiceover": "১৬৫ থেকে ১৮০ শব্দের পূর্ণাঙ্গ বাংলা ভয়েসওভার টেক্সট...",
+  "bangla_title": "বাংলায় মুভির নাম",
+  "story_bn": "২৫ থেকে ৩৫ শব্দের বাংলা গল্প সারাংশ",
+  "word_count": 172
+}}"""
+
 
     models = ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-flash-latest"]
     for model in models:
@@ -384,9 +472,11 @@ OUTPUT JSON ONLY:
                     story_bn = j.get("story_bn","").strip()
                     wc = len(voice.split())
                     print(f"Gemini {model} OK - {wc} words story: {story_bn[:50]}")
-                    if wc < 90:
-                        print(f"Too short {wc}")
-                        continue
+                    if wc < 150:  # New prompt requires 165-180, but accept 150+ as minimum
+                        print(f"Too short {wc} - required 165-180, got {wc}")
+                        # Still try next model but log
+                        if wc < 150:
+                            continue
                     if not story_bn or len(story_bn.split()) < 8:
                         # Generate fallback story from overview
                         story_bn = f"{overview[:120]} এক অসাধারণ গল্পের জগত!"
@@ -396,9 +486,15 @@ OUTPUT JSON ONLY:
             print(f"Gemini {model} err {e}")
             continue
     
-    # Fallback
+    # GEMINI FAILED - Try GROQ fallback
+    print("All Gemini models failed, trying Groq llama-3.3-70b-versatile fallback...")
+    groq_voice, groq_story, groq_title = call_groq_fallback(title_raw, year, m_type, rating, overview, link, genre_str)
+    if groq_voice:
+        return groq_voice, groq_story, groq_title
+    
+    # Final fallback
     story_bn = "এক অসাধারণ রহস্যময় গল্পের জগত! প্রতিটা মুহূর্তে টানটান উত্তেজনা।"
-    voice = f"বন্ধুরা আজকে কথা বলবো {year} সালের সিনেমা {title_raw} নিয়ে। গল্পটা অসাধারণ।"
+    voice = f"বন্ধুরা আজকে কথা বলবো {year} সালের সিনেমা {title_raw} নিয়ে। এই সিনেমার গল্পটা এতটাই অসাধারণ যে একবার দেখা শুরু করলে শেষ না করে উঠতে পারবেন না। প্রধান চরিত্রের অভিনয় এবং পরিচালনা দুর্দান্ত। বিশেষ করে শেষের চমকটা আপনার মাথা ঘুরিয়ে দেবে। যারা থ্রিলার এবং ড্রামা পছন্দ করেন তাদের জন্য এটা অবশ্যই দেখার মতো। পুরো রিভিউ পেতে ভিজিট করুন movimoon.online। এই সিনেমাটি আপনাদের মন ছুঁয়ে যাবে। প্রতিটা মুহূর্ত টানটান উত্তেজনায় ভরা।"
     return voice, story_bn, title_raw
 
 def build_caption(title, year, m_type, genre_str, rating, story_bn, link):
@@ -408,6 +504,7 @@ def build_caption(title, year, m_type, genre_str, rating, story_bn, link):
 🎭 Genres - {genre_str}
 ⭐ Rating - {rating}/10
 📖 Story - {story_bn}
+এক অসাধারণ রহস্যময় গল্পের জগত!
 🔗 ফুল মুভি লিংক: {link}
 👉 পুরো রিভিউ এবং ডাউনলোড পেতে ভিজিট করুন movimoon.online
 #MoviMoon #MovieReview #TrendingNow #MustWatch #BengaliReview #ViralReels
@@ -415,25 +512,29 @@ def build_caption(title, year, m_type, genre_str, rating, story_bn, link):
     return caption
 
 async def generate_tts_voice(text, output_path="voice.mp3"):
-    print(f"TTS: {len(text.split())} words RATE +28% STUDIO EFFECT")
+    print(f"TTS: {len(text.split())} words RATE +28% PRO STUDIO V11 NO ROBOTIC")
     communicate = edge_tts.Communicate(text, VOICE, rate=RATE, pitch=PITCH, volume=VOLUME)
     await communicate.save(output_path)
     try:
-        # STUDIO EFFECT: Professional chain - highpass, lowpass, compand, equalizer, reverb, loudnorm
-        loud_path = output_path.replace(".mp3", "_studio.mp3")
-        # Studio chain: highpass 80Hz, lowpass 12000Hz, compand for compression, aecho small reverb, equalizer boost presence, loudnorm
-        cmd = f'ffmpeg -y -i "{output_path}" -filter:a "highpass=f=80,lowpass=f=12000,compand=attacks=0:points=-80/-900|-45/-15|-27/-9|0/-7|20/-7:gain=3:volume=-60:delay=0.2,aecho=0.8:0.88:40:0.25,equalizer=f=3000:width_type=o:width=1.5:g=2,equalizer=f=100:width_type=o:width=1:g=-1,loudnorm=I=-14:TP=-1.0:LRA=7,volume=1.2" -c:a libmp3lame -q:a 1 "{loud_path}"'
-        subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
-        if Path(loud_path).exists() and Path(loud_path).stat().st_size > 1000:
-            Path(loud_path).replace(output_path)
-            print(f"Studio voice effect applied {Path(output_path).stat().st_size/1024:.1f} KB")
+        studio_path = output_path.replace(".mp3", "_studio.mp3")
+        # V11 PRO STUDIO CHAIN - NO aecho, NO apulsator (these cause robotic)
+        # Chain: highpass 85Hz remove rumble, lowpass 11000, compressor for consistent loudness, 
+        # de-esser via equalizer, presence boost 3kHz, loudnorm broadcast standard
+        cmd = f'ffmpeg -y -i "{output_path}" -filter:a "highpass=f=85:width_type=o:width=1,lowpass=f=11000:width_type=o:width=1,acompressor=threshold=-18dB:ratio=4:attack=20:release=200:makeup=6dB,equalizer=f=3000:width_type=o:width=1.2:g=2.5,equalizer=f=8000:width_type=o:width=2:g=-2,equalizer=f=150:width_type=o:width=1:g=-1.5,loudnorm=I=-16:TP=-1.5:LRA=7:linear=true,volume=1.15" -c:a libmp3lame -q:a 0 -ar 48000 "{studio_path}"'
+        result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
+        if Path(studio_path).exists() and Path(studio_path).stat().st_size > 1000:
+            Path(studio_path).replace(output_path)
+            print(f"PRO Studio voice applied - NO robotic {Path(output_path).stat().st_size/1024:.1f} KB")
         else:
-            # Fallback simple loudnorm
-            os.system(f'ffmpeg -y -i "{output_path}" -filter:a loudnorm=I=-14:TP=-1.5:LRA=11 "{loud_path}"')
-            if Path(loud_path).exists():
-                Path(loud_path).replace(output_path)
+            print(f"Studio failed, fallback: {result.stderr[-300:]}")
+            # Fallback
+            fb = output_path.replace(".mp3", "_fb.mp3")
+            subprocess.run(f'ffmpeg -y -i "{output_path}" -filter:a "highpass=f=80,loudnorm=I=-16:TP=-1.5:LRA=11,volume=1.1" -c:a libmp3lame -q:a 1 "{fb}"', shell=True, capture_output=True, timeout=20)
+            if Path(fb).exists():
+                Path(fb).replace(output_path)
     except Exception as e:
         print(f"Studio effect err {e}")
+        import traceback; traceback.print_exc()
     return output_path
 
 def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp4", bgm_path=None, trailer_duration=60):
@@ -445,22 +546,32 @@ def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp
             bgm_path = generate_local_cinematic_bgm("bgm.mp3", "cinematic", duration=trailer_duration)
             has_bgm = Path(bgm_path).exists()
         
-        # Dynamic duration - trailer_duration
         dur = int(trailer_duration)
-        print(f"Creating {dur}s video - BGM vol 0.32 louder, trailer vol 0.12")
+        print(f"Creating {dur}s video V11 SIDECHAIN DUCKING - BGM auto ducks when voice speaks")
+        
+        # V11: SIDECHAIN COMPRESS AUTO-DUCKING
+        # Logic:
+        # - trailer audio very low 0.08
+        # - BGM 0.38 but ducks to 0.10 when voice speaks (ratio 8)
+        # - voice stays 1.0 clear
+        # - No robotic filters
         
         if poster_path and Path(poster_path).exists():
             cmd = (
                 f'ffmpeg -y -loop 1 -t {dur} -i "{poster_path}" '
                 f'-i "{trailer_path}" -i "{voice_path}" -stream_loop -1 -i "{bgm_path}" '
                 f'-filter_complex "'
-                f'[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=18:steps=2,setsar=1,trim=duration={dur}[bg];'
+                f'[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=20:steps=2,setsar=1,trim=duration={dur}[bg];'
                 f'[1:v]scale=1080:800:force_original_aspect_ratio=increase,crop=1080:800[fg];'
                 f'[bg][fg]overlay=(W-w)/2:(H-h)/2:shortest=1:format=auto,scale=1080:1920:flags=lanczos[base];'
-                f'[1:a]volume=0.12[trailera];'
-                f'[2:a]volume=1.0,loudnorm=I=-14:TP=-1.5:LRA=11[voicea];'
-                f'[3:a]volume=0.32[bgma];'
-                f'[trailera][bgma][voicea]amix=inputs=3:duration=longest:dropout_transition=0:weights=0.12 0.32 1.0,volume=1.3,loudnorm=I=-14:TP=-1.5:LRA=11[a]" '
+                # Audio: trailer low, bgm medium, voice split for sidechain
+                f'[1:a]volume=0.08[trailer_low];'
+                f'[3:a]volume=0.40[bg_vol];'
+                f'[2:a]asplit=2[voice_sc][voice_mix];'
+                # Auto-duck: bg ducks when voice present - threshold 0.015 sensitive, ratio 8 strong duck, attack 20ms fast, release 400ms smooth
+                f'[bg_vol][voice_sc]sidechaincompress=threshold=0.015:ratio=8:attack=20:release=400:makeup=1[ducked];'
+                # Mix all: trailer_low + ducked bgm + voice (voice loudest)
+                f'[trailer_low][ducked][voice_mix]amix=inputs=3:duration=longest:dropout_transition=0:weights=0.08 0.35 1,volume=1.25,loudnorm=I=-16:TP=-1.5:LRA=8[a]" '
                 f'-map "[base]" -map "[a]" '
                 f'-c:v libx264 -preset fast -crf 18 -pix_fmt yuv420p -r 30 '
                 f'-c:a aac -b:a 192k -t {dur} "{output}"'
@@ -469,26 +580,41 @@ def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp
             cmd = (
                 f'ffmpeg -y -i "{trailer_path}" -i "{voice_path}" -stream_loop -1 -i "{bgm_path}" '
                 f'-filter_complex "'
-                f'[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=18:steps=2[bg];'
+                f'[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=20:steps=2[bg];'
                 f'[0:v]scale=1080:800:force_original_aspect_ratio=increase,crop=1080:800[fg];'
                 f'[bg][fg]overlay=(W-w)/2:(H-h)/2:shortest=1,scale=1080:1920:flags=lanczos[base];'
-                f'[0:a]volume=0.12[trailera];'
-                f'[1:a]volume=1.0,loudnorm=I=-14:TP=-1.5:LRA=11[voicea];'
-                f'[2:a]volume=0.32[bgma];'
-                f'[trailera][bgma][voicea]amix=inputs=3:duration=longest:dropout_transition=0:weights=0.12 0.32 1.0,volume=1.3[a]" '
+                f'[0:a]volume=0.08[trailer_low];'
+                f'[2:a]volume=0.40[bg_vol];'
+                f'[1:a]asplit=2[voice_sc][voice_mix];'
+                f'[bg_vol][voice_sc]sidechaincompress=threshold=0.015:ratio=8:attack=20:release=400:makeup=1[ducked];'
+                f'[trailer_low][ducked][voice_mix]amix=inputs=3:duration=longest:dropout_transition=0:weights=0.08 0.35 1,volume=1.25,loudnorm=I=-16:TP=-1.5:LRA=8[a]" '
                 f'-map "[base]" -map "[a]" '
                 f'-c:v libx264 -preset fast -crf 19 -pix_fmt yuv420p -r 30 '
                 f'-c:a aac -b:a 192k -t {dur} "{output}"'
             )
-        print(f"FFmpeg {dur}s HD + LOUD BGM + STUDIO VOICE...")
+        print(f"FFmpeg V11 SIDECHAIN DUCKING {dur}s...")
         result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=180)
         if Path(output).exists() and Path(output).stat().st_size > 50000:
-            print(f"Final OK {Path(output).stat().st_size/1024/1024:.2f} MB {get_video_duration(output):.1f}s")
+            print(f"Final OK V11 {Path(output).stat().st_size/1024/1024:.2f} MB {get_video_duration(output):.1f}s - Voice clear, BGM ducks automatically")
             return output
-        print(f"FFmpeg err {result.stderr[-800:]}")
+        print(f"FFmpeg err {result.stderr[-1000:]}")
+        # Fallback without sidechain if fails (older ffmpeg)
+        print("Fallback to simple mix without sidechain...")
+        fallback_cmd = (
+            f'ffmpeg -y -loop 1 -t {dur} -i "{poster_path}" -i "{trailer_path}" -i "{voice_path}" -stream_loop -1 -i "{bgm_path}" '
+            f'-filter_complex "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=18[bg];[1:v]scale=1080:800[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2[base];[1:a]volume=0.08[tl];[3:a]volume=0.30[bgv];[2:a]volume=1.0[vo];[tl][bgv][vo]amix=inputs=3:duration=longest:weights=0.08 0.30 1,volume=1.2[a]" '
+            f'-map "[base]" -map "[a]" -c:v libx264 -preset fast -crf 18 -pix_fmt yuv420p -r 30 -c:a aac -b:a 192k -t {dur} "{output}"'
+        ) if poster_path and Path(poster_path).exists() else (
+            f'ffmpeg -y -i "{trailer_path}" -i "{voice_path}" -stream_loop -1 -i "{bgm_path}" '
+            f'-filter_complex "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=18[bg];[0:v]scale=1080:800[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2[base];[0:a]volume=0.08[tl];[2:a]volume=0.30[bgv];[1:a]volume=1.0[vo];[tl][bgv][vo]amix=inputs=3:duration=longest:weights=0.08 0.30 1,volume=1.2[a]" '
+            f'-map "[base]" -map "[a]" -c:v libx264 -preset fast -crf 19 -pix_fmt yuv420p -r 30 -c:a aac -b:a 192k -t {dur} "{output}"'
+        )
+        subprocess.run(fallback_cmd, shell=True, capture_output=True, timeout=180)
+        if Path(output).exists():
+            return output
         return None
     except Exception as e:
-        print(f"9:16 Error {e}")
+        print(f"V11 Error {e}")
         import traceback; traceback.print_exc()
         return None
 
@@ -516,7 +642,7 @@ def build_movimoon_link(movie):
         return f"https://movimoon.online/movie/{tmdb_id}-{slug}", "movie"
 
 def main():
-    print("=== MAIN START V10 NEW CAPTION+SMARTCUT+STUDIO ===")
+    print("=== MAIN START V11 SIDECHAIN NEW CAPTION+SMARTCUT+STUDIO ===")
     history = load_history()
     items = get_trending_mixed()
     print(f"Found {len(items)} items")
@@ -559,7 +685,7 @@ def main():
             trailer_dur = get_video_duration(trailer_60s)
             print(f"Trailer final {trailer_dur:.1f}s")
             
-            # BGM same duration as trailer
+            # BGM same duration + sidechain
             bgm_file = ensure_bgm("bgm.mp3", movie=movie, duration=int(trailer_dur))
             
             # Studio voice
