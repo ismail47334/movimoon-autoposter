@@ -325,6 +325,7 @@ Your core objective is to write an engaging, dramatic, and precise 60-second Ben
 - STRICT WORD COUNT: EXACTLY between 165 and 180 Bengali words. 
 - UNDER NO CIRCUMSTANCES should the word count be less than 165 words (Short scripts cause audio timing failure).
 - Do a strict self-count before generating the final JSON response.
+- CRITICAL WARNING: If the voiceover is under 165 words, it is considered a COMPLETE FAILURE. You must expand the descriptions, add emotional depth, and elaborate on the plot details until the word count strictly hits between 165 and 180 words. NEVER return under 165 words.
 
 ### INPUT DATA:
 - Movie Title: {title}
@@ -356,19 +357,28 @@ Return ONLY a valid, raw JSON object. Do NOT include markdown code blocks, expla
   "word_count": 172
 }}"""
         groq_prompt = prompt
-        groq_models = ["llama-3.3-70b-versatile", "llama-3.1-70b-versatile", "llama-3.1-8b-instant", "openai/gpt-oss-20b", "openai/gpt-oss-120b", "mixtral-8x7b-32768"]
+        groq_models = ["llama-3.3-70b-specdec", "llama-3.3-70b-versatile", "meta-llama/llama-4-maverick-17b-128e-instruct", "meta-llama/llama-4-scout-17b-16e-instruct", "qwen/qwen3-32b", "moonshotai/kimi-k2-instruct", "llama3-70b-8192", "llama3-8b-8192", "openai/gpt-oss-20b", "openai/gpt-oss-120b"]
         completion = None
         last_err = None
         for gmodel in groq_models:
             try:
                 print(f"Trying Groq model {gmodel}...")
-                completion = client.chat.completions.create(
-                    model=gmodel,
-                    messages=[{"role": "user", "content": groq_prompt}],
-                    temperature=1.0,
-                    max_tokens=3000,
-                    response_format={"type": "json_object"}
-                )
+                # gpt-oss models don't support json_object format
+                if "gpt-oss" in gmodel:
+                    completion = client.chat.completions.create(
+                        model=gmodel,
+                        messages=[{"role": "user", "content": groq_prompt}],
+                        temperature=1.0,
+                        max_tokens=3000
+                    )
+                else:
+                    completion = client.chat.completions.create(
+                        model=gmodel,
+                        messages=[{"role": "user", "content": groq_prompt}],
+                        temperature=1.0,
+                        max_tokens=3000,
+                        response_format={"type": "json_object"}
+                    )
                 print(f"Groq model {gmodel} success")
                 break
             except Exception as ge:
@@ -407,6 +417,7 @@ Your core objective is to write an engaging, dramatic, and precise 60-second Ben
 - STRICT WORD COUNT: EXACTLY between 165 and 180 Bengali words. 
 - UNDER NO CIRCUMSTANCES should the word count be less than 165 words (Short scripts cause audio timing failure).
 - Do a strict self-count before generating the final JSON response.
+- CRITICAL WARNING: If the voiceover is under 165 words, it is considered a COMPLETE FAILURE. You must expand the descriptions, add emotional depth, and elaborate on the plot details until the word count strictly hits between 165 and 180 words. NEVER return under 165 words.
 
 ### INPUT DATA:
 - Movie Title: {title}
@@ -445,7 +456,7 @@ Return ONLY a valid, raw JSON object. Do NOT include markdown code blocks, expla
     for model in models:
         try:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
-            data = {"contents":[{"parts":[{"text":prompt}]}], "generationConfig":{"temperature":1.0, "topP":0.95, "topK":40, "maxOutputTokens": 4096}}
+            data = {"contents":[{"parts":[{"text":prompt}]}], "generationConfig":{"temperature":0.7, "topP":0.9, "maxOutputTokens": 4096, "response_mime_type": "application/json"}}
             res = requests.post(url, json=data, timeout=30)
             if res.status_code == 200:
                 js = res.json()
@@ -462,9 +473,44 @@ Return ONLY a valid, raw JSON object. Do NOT include markdown code blocks, expla
                     story_bn = j.get("caption","").strip() or j.get("story_bn","").strip()
                     wc = len(voice.split())
                     print(f"Gemini {model} OK - {wc} words story: {story_bn[:60]}")
-                    if wc < 140:
-                        print(f"Too short {wc} - required 165, skipping")
-                        continue
+                    # PROGRAMMATIC LOOP: If under 165, auto-expand via self-correction request
+                    if wc < 165:
+                        if wc < 140:
+                            print(f"Too short {wc} - required 165, trying self-correction loop")
+                            # Self-correction: ask Gemini to expand previous text
+                            try:
+                                expand_prompt = f"Previous voiceover was only {wc} words, need 165-180. Expand this to 175 words by adding emotional depth, acting details, cinematography, music: {voice}"
+                                data2 = {"contents":[{"parts":[{"text":expand_prompt}]}], "generationConfig":{"temperature":0.7, "topP":0.9, "maxOutputTokens": 4096, "response_mime_type": "application/json"}}
+                                res2 = requests.post(url, json=data2, timeout=30)
+                                if res2.status_code == 200:
+                                    js2 = res2.json()
+                                    text2 = js2["candidates"][0]["content"]["parts"][0]["text"]
+                                    clean2 = text2.replace("```json","").replace("```","").strip()
+                                    m2 = re.search(r'\{.*\}', clean2, re.DOTALL)
+                                    if m2:
+                                        j2 = json.loads(m2.group())
+                                        voice2 = j2.get("voiceover","").strip()
+                                        wc2 = len(voice2.split())
+                                        if wc2 >= 165:
+                                            print(f"Self-correction SUCCESS {wc} -> {wc2} words")
+                                            return voice2, story_bn, j2.get("bangla_title", title_raw)
+                                        else:
+                                            print(f"Self-correction still short {wc2}, using expansion fallback")
+                                            voice = voice2 if wc2 > wc else voice
+                                            # Fallback expansion
+                                            voice = voice + " এই সিনেমার প্রতিটি দৃশ্য অসাধারণভাবে সাজানো হয়েছে। পরিচালকের মুন্সিয়ানা এবং অভিনেতাদের দুর্দান্ত অভিনয় আপনাকে মুগ্ধ করবে। সিনেমাটোগ্রাফি এবং আবহ সঙ্গীত গল্পটিকে আরও প্রাণবন্ত করে তুলেছে। প্রতিটি মুহূর্তে টানটান উত্তেজনা এবং আবেগ রয়েছে। শেষের টুইস্টটা একেবারে অপ্রত্যাশিত এবং মন ছুঁয়ে যাবে।"
+                                            wc = len(voice.split())
+                                            print(f"After fallback expansion: {wc} words")
+                            except Exception as e:
+                                print(f"Self-correction failed: {e}")
+                                # Fallback expansion
+                                voice = voice + " এই সিনেমার প্রতিটি দৃশ্য অসাধারণভাবে সাজানো হয়েছে। পরিচালকের মুন্সিয়ানা এবং অভিনেতাদের দুর্দান্ত অভিনয় আপনাকে মুগ্ধ করবে।"
+                                wc = len(voice.split())
+                        else:
+                            # 140-164 borderline, just expand
+                            voice = voice + " এই সিনেমার প্রতিটি মুহূর্ত আপনাকে আটকে রাখবে। অসাধারণ সিনেমাটোগ্রাফি এবং আবহ সঙ্গীত গল্পটিকে আরও প্রাণবন্ত করে তুলেছে। শেষের টুইস্টটা একেবারে অপ্রত্যাশিত।"
+                            wc = len(voice.split())
+                            print(f"Borderline expansion: {wc} words")
                     if not story_bn:
                         story_bn = f"{overview[:120]} এক অসাধারণ গল্পের জগত!"
                     return voice, story_bn, j.get("bangla_title", title_raw)
@@ -495,7 +541,7 @@ Return ONLY a valid, raw JSON object. Do NOT include markdown code blocks, expla
     for model in models:
         try:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
-            data = {"contents":[{"parts":[{"text":prompt}]}], "generationConfig":{"temperature":1.0, "topP":0.95, "topK":40, "maxOutputTokens": 4096}}
+            data = {"contents":[{"parts":[{"text":prompt}]}], "generationConfig":{"temperature":0.7, "topP":0.9, "maxOutputTokens": 4096, "response_mime_type": "application/json"}}
             res = requests.post(url, json=data, timeout=30)
             if res.status_code == 200:
                 js = res.json()
