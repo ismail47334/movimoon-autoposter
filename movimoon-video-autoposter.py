@@ -2,7 +2,7 @@ import os, requests, random, re, time, asyncio, json, subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
 
-print("=== MoviMoon Bot - MASTER V9 FAST 10-TRY ===")
+print("=== MoviMoon Bot - MASTER V10 CAPTION+BGM+SMARTCUT ===")
 
 try:
     import edge_tts
@@ -61,12 +61,18 @@ def get_trending_mixed():
     current_year = datetime.now().year
     min_year = current_year - 2
     min_date = f"{min_year}-01-01"
-    print(f"Filtering: Only {min_year}+")
+    print(f"Filtering: {min_year}+ | Hollywood + Bollywood + South + Series")
     all_results = []
     urls = [
         f"https://api.themoviedb.org/3/trending/movie/day?api_key={TMDB_API_KEY}&language=en-US",
         f"https://api.themoviedb.org/3/trending/tv/day?api_key={TMDB_API_KEY}&language=en-US",
-        f"https://api.themoviedb.org/3/discover/movie?api_key={TMDB_API_KEY}&primary_release_date.gte={min_date}&sort_by=popularity.desc&vote_count.gte=20&page=1",
+        f"https://api.themoviedb.org/3/discover/movie?api_key={TMDB_API_KEY}&primary_release_date.gte={min_date}&sort_by=popularity.desc&vote_count.gte=30&page=1",
+        f"https://api.themoviedb.org/3/discover/movie?api_key={TMDB_API_KEY}&with_original_language=hi&primary_release_date.gte={min_date}&sort_by=popularity.desc&vote_count.gte=10&page=1",
+        f"https://api.themoviedb.org/3/discover/movie?api_key={TMDB_API_KEY}&with_original_language=te&primary_release_date.gte={min_date}&sort_by=popularity.desc&vote_count.gte=5&page=1",
+        f"https://api.themoviedb.org/3/discover/movie?api_key={TMDB_API_KEY}&with_original_language=ta&primary_release_date.gte={min_date}&sort_by=popularity.desc&vote_count.gte=5&page=1",
+        f"https://api.themoviedb.org/3/discover/movie?api_key={TMDB_API_KEY}&with_original_language=ml&primary_release_date.gte={min_date}&sort_by=popularity.desc&vote_count.gte=3&page=1",
+        f"https://api.themoviedb.org/3/discover/tv?api_key={TMDB_API_KEY}&first_air_date.gte={min_date}&sort_by=popularity.desc&vote_count.gte=20&page=1&with_origin_country=IN",
+        f"https://api.themoviedb.org/3/discover/tv?api_key={TMDB_API_KEY}&first_air_date.gte={min_date}&sort_by=popularity.desc&vote_count.gte=20&page=1",
     ]
     for url in urls:
         try:
@@ -75,7 +81,7 @@ def get_trending_mixed():
             for m in results:
                 if 'media_type' not in m:
                     m['media_type'] = 'tv' if 'first_air_date' in m else 'movie'
-            all_results.extend(results[:8])
+            all_results.extend(results[:10])
         except Exception as e:
             print(f"TMDB Error: {e}")
             continue
@@ -96,8 +102,8 @@ def get_trending_mixed():
         if m['id'] not in seen:
             unique.append(m)
             seen.add(m['id'])
-    print(f"Found {len(unique)} unique, returning 10")
-    return unique[:10]  # user requested 10 tries
+    print(f"Total fetched {len(all_results)}, after filter {len(filtered)}, unique {len(unique)}")
+    return unique[:10]
 
 def get_youtube_trailer(movie):
     tmdb_id = movie['id']
@@ -144,17 +150,16 @@ def download_via_ytdlp_fixed(youtube_url, output="trailer.mp4"):
                 size_mb = Path(output).stat().st_size/1024/1024
                 print(f"YT-DLP SUCCESS {i} - {size_mb:.2f} MB")
                 return output
-            else:
-                print(f"Strategy {i} failed")
+            print(f"Strategy {i} failed")
             Path(output).unlink(missing_ok=True)
         except subprocess.TimeoutExpired:
-            print(f"Strategy {i} TIMEOUT 60s")
+            print(f"Strategy {i} TIMEOUT")
             Path(output).unlink(missing_ok=True)
             continue
         except Exception as e:
             print(f"Strategy {i} err {e}")
             continue
-    print("ALL YT-DLP STRATEGIES FAILED")
+    print("ALL YT-DLP FAILED")
     return None
 
 def download_trailer(youtube_url, output="trailer.mp4"):
@@ -176,102 +181,167 @@ def download_movie_poster(movie, output="poster.jpg"):
         print(f"Poster err {e}")
     return None
 
-def get_genre_names(genre_ids):
-    genre_map = {
-        28: "অ্যাকশন", 12: "অ্যাডভেঞ্চার", 16: "অ্যানিমেশন", 35: "কমেডি",
-        80: "ক্রাইম", 99: "ডকুমেন্টারি", 18: "ড্রামা", 10751: "ফ্যামিলি",
-        14: "ফ্যান্টাসি", 36: "ইতিহাস", 27: "হরর", 10402: "মিউজিক",
-        9648: "মিস্ট্রি", 10749: "রোমান্স", 878: "সায়েন্স ফিকশন",
-        10770: "টিভি মুভি", 53: "থ্রিলার", 10752: "ওয়ার", 37: "ওয়েস্টার্ন"
+def get_genre_names(genre_ids, english=False):
+    # English for caption like screenshot
+    genre_map_en = {
+        28: "Action", 12: "Adventure", 16: "Animation", 35: "Comedy",
+        80: "Crime", 99: "Documentary", 18: "Drama", 10751: "Family",
+        14: "Fantasy", 36: "History", 27: "Horror", 10402: "Music",
+        9648: "Mystery", 10749: "Romance", 878: "Sci-Fi",
+        10770: "TV Movie", 53: "Thriller", 10752: "War", 37: "Western",
+        10759: "Action", 10765: "Sci-Fi", 10762: "Kids", 10763: "News",
+        10764: "Reality", 10767: "Talk"
     }
     if not genre_ids:
-        return "ড্রামা, থ্রিলার"
-    names = [genre_map.get(g, "") for g in genre_ids[:3] if g in genre_map]
-    return ", ".join(names) if names else "ড্রামা, থ্রিলার"
+        return "Drama, Thriller"
+    names = [genre_map_en.get(g, "") for g in genre_ids[:3] if g in genre_map_en]
+    return ", ".join(names) if names else "Drama, Thriller"
 
-def generate_local_cinematic_bgm(output="bgm.mp3", category="cinematic", duration=65):
+def generate_local_cinematic_bgm(output="bgm.mp3", category="cinematic", duration=60):
     try:
         if Path(output).exists():
-            try: Path(output).unlink()
-            except: pass
-        print(f"Generating local {category} BGM...")
+            Path(output).unlink(missing_ok=True)
+        duration = int(duration)
+        print(f"Generating {category} BGM {duration}s LOUDER...")
+        # Louder volume 0.35-0.45 vs before 0.18-0.22
         if category == "suspense":
-            cmd = f'ffmpeg -y -f lavfi -i "sine=frequency=40:beep_factor=8:sample_rate=48000:duration={duration},aecho=0.8:0.9:1000:0.3,lowpass=f=400,volume=0.18" -f lavfi -i "sine=frequency=80:beep_factor=12:duration={duration},aecho=0.8:0.88:800:0.25,lowpass=f=500,volume=0.12" -filter_complex "[0:a][1:a]amix=inputs=2:duration=longest,apulsator=hz=0.15,volume=0.25" -c:a libmp3lame -q:a 4 "{output}"'
+            cmd = f'ffmpeg -y -f lavfi -i "sine=frequency=40:beep_factor=8:sample_rate=48000:duration={duration},aecho=0.8:0.9:1000:0.3,lowpass=f=400,volume=0.35" -f lavfi -i "sine=frequency=80:beep_factor=12:duration={duration},aecho=0.8:0.88:800:0.25,lowpass=f=500,volume=0.28" -filter_complex "[0:a][1:a]amix=inputs=2:duration=longest,apulsator=hz=0.15,volume=0.45,loudnorm=I=-16:TP=-1.5:LRA=11" -c:a libmp3lame -q:a 3 "{output}"'
         elif category == "epic_action":
-            cmd = f'ffmpeg -y -f lavfi -i "sine=frequency=55:beep_factor=4:duration={duration},aecho=0.8:0.88:60:0.4,volume=0.20" -f lavfi -i "sine=frequency=110:beep_factor=6:duration={duration},aecho=0.8:0.9:120:0.3,volume=0.15" -filter_complex "[0:a][1:a]amix=inputs=2,lowpass=f=600,apulsator=hz=0.5,volume=0.30" -c:a libmp3lame -q:a 4 "{output}"'
+            cmd = f'ffmpeg -y -f lavfi -i "sine=frequency=55:beep_factor=4:duration={duration},aecho=0.8:0.88:60:0.4,volume=0.38" -f lavfi -i "sine=frequency=110:beep_factor=6:duration={duration},aecho=0.8:0.9:120:0.3,volume=0.30" -filter_complex "[0:a][1:a]amix=inputs=2,lowpass=f=600,apulsator=hz=0.5,volume=0.50,loudnorm=I=-14" -c:a libmp3lame -q:a 3 "{output}"'
         elif category == "emotional":
-            cmd = f'ffmpeg -y -f lavfi -i "sine=frequency=196.00:duration={duration},aecho=0.8:0.88:500:0.35,volume=0.18" -f lavfi -i "sine=frequency=261.63:duration={duration},aecho=0.8:0.9:600:0.3,volume=0.12" -filter_complex "[0:a][1:a]amix=inputs=2,lowpass=f=1200,volume=0.22" -c:a libmp3lame -q:a 4 "{output}"'
+            cmd = f'ffmpeg -y -f lavfi -i "sine=frequency=196:duration={duration},aecho=0.8:0.88:500:0.35,volume=0.32" -f lavfi -i "sine=frequency=261:duration={duration},aecho=0.8:0.9:600:0.3,volume=0.25" -filter_complex "[0:a][1:a]amix=inputs=2,lowpass=f=1200,volume=0.42" -c:a libmp3lame -q:a 3 "{output}"'
         elif category == "happy":
-            cmd = f'ffmpeg -y -f lavfi -i "sine=frequency=196:duration={duration},apulsator=hz=0.8,volume=0.15" -f lavfi -i "sine=frequency=246:duration={duration},apulsator=hz=1.0,volume=0.10" -filter_complex "[0:a][1:a]amix=inputs=2,highpass=f=200,lowpass=f=2000,volume=0.20" -c:a libmp3lame -q:a 4 "{output}"'
+            cmd = f'ffmpeg -y -f lavfi -i "sine=frequency=196:duration={duration},apulsator=hz=0.8,volume=0.28" -f lavfi -i "sine=frequency=246:duration={duration},apulsator=hz=1.0,volume=0.22" -filter_complex "[0:a][1:a]amix=inputs=2,highpass=f=200,lowpass=f=2000,volume=0.40" -c:a libmp3lame -q:a 3 "{output}"'
         else:
-            cmd = f'ffmpeg -y -f lavfi -i "sine=frequency=55:duration={duration},aecho=0.8:0.88:60:0.4,lowpass=f=800,volume=0.20" -f lavfi -i "sine=frequency=110:duration={duration},aecho=0.8:0.9:120:0.3,lowpass=f=1000,volume=0.12" -filter_complex "[0:a][1:a]amix=inputs=2,volume=0.25" -c:a libmp3lame -q:a 4 "{output}"'
+            cmd = f'ffmpeg -y -f lavfi -i "sine=frequency=55:duration={duration},aecho=0.8:0.88:60:0.4,lowpass=f=800,volume=0.35" -f lavfi -i "sine=frequency=110:duration={duration},aecho=0.8:0.9:120:0.3,lowpass=f=1000,volume=0.28" -filter_complex "[0:a][1:a]amix=inputs=2,volume=0.45,loudnorm=I=-16" -c:a libmp3lame -q:a 3 "{output}"'
         subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
         if Path(output).exists() and Path(output).stat().st_size > 1000:
-            print(f"Local BGM OK {Path(output).stat().st_size/1024:.1f} KB")
+            print(f"BGM OK {Path(output).stat().st_size/1024:.1f} KB louder")
             return output
-        cmd2 = f'ffmpeg -y -f lavfi -i "sine=frequency=80:duration={duration}" -c:a libmp3lame -q:a 9 -filter:a "volume=0.15,lowpass=f=500" "{output}"'
+        cmd2 = f'ffmpeg -y -f lavfi -i "sine=frequency=80:duration={duration}" -c:a libmp3lame -q:a 9 -filter:a "volume=0.35,lowpass=f=500" "{output}"'
         subprocess.run(cmd2, shell=True, capture_output=True, timeout=20)
         if Path(output).exists():
             return output
     except Exception as e:
-        print(f"Local BGM error {e}")
+        print(f"BGM error {e}")
     return None
 
-def ensure_bgm(output="bgm.mp3", movie=None):
+def ensure_bgm(output="bgm.mp3", movie=None, duration=60):
     try:
         genre_ids = movie.get("genre_ids", []) if movie else []
         category = "cinematic"
         if any(g in genre_ids for g in [27, 53, 9648, 80]):
             category = "suspense"
-        elif any(g in genre_ids for g in [28, 12, 10752, 37]):
+        elif any(g in genre_ids for g in [28, 12, 10752, 37, 10759]):
             category = "epic_action"
-        elif any(g in genre_ids for g in [35, 16, 10751]):
+        elif any(g in genre_ids for g in [35, 16, 10751, 10762]):
             category = "happy"
         elif any(g in genre_ids for g in [10749, 18, 36]):
             category = "emotional"
-        elif any(g in genre_ids for g in [878, 14]):
+        elif any(g in genre_ids for g in [878, 14, 10765]):
             category = "cinematic_futuristic"
-        print(f"BGM Category: {category}")
-        return generate_local_cinematic_bgm(output, category, duration=65)
+        print(f"BGM Category: {category} Duration: {duration}s")
+        return generate_local_cinematic_bgm(output, category, duration=duration)
     except Exception as e:
         print(f"BGM err {e}")
-        return generate_local_cinematic_bgm(output, "cinematic", duration=65)
+        return generate_local_cinematic_bgm(output, "cinematic", duration=duration)
 
-def trim_trailer_to_60s(input_path, output_path="trailer_60s.mp4"):
+def smart_trim_trailer_to_60s(input_path, output_path="trailer_60s.mp4"):
+    """Smart cut: if >60s, remove first 5s, then cut 5s every 15s until 60s"""
     try:
-        if Path(output_path).exists(): Path(output_path).unlink()
-        cmd = f'ffmpeg -y -i "{input_path}" -t 60 -c:v libx264 -preset fast -crf 23 -c:a aac "{output_path}"'
+        dur = get_video_duration(input_path)
+        print(f"Original trailer {dur:.1f}s")
+        if Path(output_path).exists():
+            Path(output_path).unlink()
+        if dur <= 62:
+            # Just trim to 60 if slightly longer
+            cmd = f'ffmpeg -y -i "{input_path}" -t 60 -c:v libx264 -preset fast -crf 23 -c:a aac "{output_path}"'
+            subprocess.run(cmd, shell=True, capture_output=True, timeout=90)
+            if Path(output_path).exists():
+                return output_path
+            return input_path
+        
+        # Smart cut logic for >60s
+        # Plan: Skip first 5s, then keep 10s, skip 5s, keep 10s pattern until 60s collected
+        # Example 120s trailer -> need 60s -> cut 60s total
+        # We'll create concat list
+        target = 60
+        # Start after 5s
+        current = 5.0
+        segments = []
+        seg_files = []
+        keep_chunk = 10
+        skip_chunk = 5
+        
+        while target > 0 and current < dur:
+            keep = min(keep_chunk, target, dur - current)
+            if keep <= 0:
+                break
+            end = current + keep
+            seg_file = f"seg_{len(segments)}.mp4"
+            seg_files.append(seg_file)
+            # Cut segment
+            cmd = f'ffmpeg -y -ss {current:.2f} -to {end:.2f} -i "{input_path}" -c:v libx264 -preset fast -crf 23 -c:a aac "{seg_file}"'
+            subprocess.run(cmd, shell=True, capture_output=True, timeout=60)
+            segments.append(seg_file)
+            target -= keep
+            current = end + skip_chunk  # skip 5s
+            # After 2 chunks, increase keep to 15 to avoid too many cuts
+            if len(segments) >= 2:
+                keep_chunk = 15
+        
+        # Concat segments
+        if segments:
+            with open("concat.txt", "w") as f:
+                for sf in segments:
+                    if Path(sf).exists():
+                        f.write(f"file '{sf}'\n")
+            cmd = f'ffmpeg -y -f concat -safe 0 -i concat.txt -c:v libx264 -preset fast -crf 23 -c:a aac "{output_path}"'
+            subprocess.run(cmd, shell=True, capture_output=True, timeout=90)
+            # Cleanup seg files
+            for sf in seg_files:
+                if Path(sf).exists():
+                    Path(sf).unlink()
+            if Path("concat.txt").exists():
+                Path("concat.txt").unlink()
+            if Path(output_path).exists():
+                print(f"Smart cut DONE {get_video_duration(output_path):.1f}s from {dur:.1f}s with {len(segments)} cuts")
+                return output_path
+        
+        # Fallback simple trim
+        cmd = f'ffmpeg -y -ss 5 -i "{input_path}" -t 60 -c:v libx264 -preset fast -crf 23 -c:a aac "{output_path}"'
         subprocess.run(cmd, shell=True, capture_output=True, timeout=90)
-        if Path(output_path).exists(): return output_path
+        if Path(output_path).exists():
+            return output_path
         return input_path
     except Exception as e:
-        print(f"Trim err {e}")
+        print(f"Smart trim err {e}")
+        import traceback; traceback.print_exc()
         return input_path
 
 def call_gemini_video_script(title, year, m_type, rating, overview, link, movie=None):
-    genre_str = get_genre_names(movie.get("genre_ids", []) if movie else [])
+    genre_str = get_genre_names(movie.get("genre_ids", []) if movie else [], english=True)
+    title_raw = title
+    
     if not GEMINI_API_KEY:
+        # Fallback caption in new format
+        story_bn = "এক অসাধারণ রহস্যময় গল্পের জগত! বাবার মৃত্যুর পর এক তরুণী নানা প্রতিকূলতার মুখোমুখি হয়।"
         voice = f"বন্ধুরা কেমন আছেন সবাই আজকে কথা বলবো {year} সালের আলোচিত সিনেমা নিয়ে। এই সিনেমার গল্পটা এতটাই টানটান উত্তেজনায় ভরা যে একবার দেখা শুরু করলে শেষ না করে উঠতে পারবেন না। প্রধান চরিত্রের অসাধারণ অভিনয় দুর্দান্ত পরিচালনা এবং আবহ সঙ্গীত আপনাকে এক মুহূর্তের জন্যও বিরক্ত হতে দেবে না। বিশেষ করে গল্পের শেষের চমকটা আপনার মাথা ঘুরিয়ে দেবে। যারা রোমাঞ্চ এবং অ্যাকশন পছন্দ করেন তাদের জন্য এটা অবশ্যই দেখার মতো একটি সিনেমা। পুরো সিনেমাটির বিস্তারিত রিভিউ পেয়ে যাবেন আমাদের ওয়েবসাইট মুভিমুন ডট অনলাইন এ। এখনই ভিজিট করুন। বন্ধুরা এই সিনেমাটি কিন্তু আপনাদের মন ছুঁয়ে যাবে। এই গল্পের প্রতিটা মুহূর্ত আপনাকে আটকে রাখবে শেষ পর্যন্ত।"
-        caption = f"🎬 Movie - {title} ({year})\n🎭 Genre - {genre_str}\n⭐ Rating - {rating}/10\n🔗 Link: {link}\n#MoviMoon"
-        return voice, caption
+        caption = f"🎬 {'Series' if m_type=='tv' else 'Movie'} - {title_raw}({year})\n🎭 Genres - {genre_str}\n⭐ Rating - {rating}/10\n📖 Story - {story_bn}\n🔗 ফুল মুভি লিংক: {link}\n👉 পুরো রিভিউ এবং ডাউনলোড পেতে ভিজিট করুন movimoon.online\n#MoviMoon #MovieReview #TrendingNow #MustWatch #BengaliReview #ViralReels\n#S #{title_raw.replace(' ', '')}"
+        return voice, caption, story_bn
 
-    prompt = f"""You are the Senior Bengali Voiceover Director & Lead Scriptwriter for MoviMoon.
-Your core objective is to write an engaging, dramatic, and precise 60-second Bengali video narration script based on the provided movie details.
+    prompt = f"""
+You are the Senior Bengali Voiceover Director & Lead Scriptwriter for MoviMoon.
+Your core objective is to write an engaging, dramatic, and precise 60-second Bengali video narration script based on the provided movie/series details.
 
 ### CRITICAL REQUIREMENTS (WORD COUNT):
 - STRICT WORD COUNT: EXACTLY between 165 and 180 Bengali words. 
 - UNDER NO CIRCUMSTANCES should the word count be less than 165 words (Short scripts cause audio timing failure).
 - Do a strict self-count before generating the final JSON response.
 
-### INPUT DATA:
-- Movie Title: {title}
-- Release Year: {year}
-- Rating: {rating}/10
-- Genre: {genre_str}
-- Overview/Plot: {overview}
-- Movie Link: {link}
+MOVIE: Title {title_raw} Year {year} Rating {rating}/10 Type {m_type} Genres {genre_str} Plot {overview} Link {link}
 
-### SCRIPT STRUCTURE & TIMING BREAKDOWN:
+TASKS:
 1. HOOK (0-10s) -> [28 to 30 words]: High energy opening to grab attention instantly.
 2. STORY PLOT (10-30s) -> [55 to 60 words]: Brief, intriguing core synopsis without spoilers.
 3. ACTING & VISUALS (30-50s) -> [50 to 55 words]: Critique of performance, direction, atmosphere, or climax setup.
@@ -285,13 +355,14 @@ Your core objective is to write an engaging, dramatic, and precise 60-second Ben
 
 ### REQUIRED OUTPUT FORMAT:
 Return ONLY a valid, raw JSON object. Do NOT include markdown code blocks, explanations, or extra text.
-
+OUTPUT JSON ONLY:
 {{
-  "voiceover": "১৬৫ থেকে ১৮০ শব্দের পূর্ণাঙ্গ বাংলা ভয়েসওভার টেক্সট...",
-  "bangla_title": "বাংলায় মুভির নাম",
-  "caption": "আকর্ষণীয় সোশ্যাল মিডিয়া ক্যাপশন উইথ হ্যাশট্যাগ",
-  "word_count": 172
-}}"""
+"voiceover": "165-180 words pure Bengali...",
+"bangla_title": "Title in Bengali",
+"story_bn": "25-35 words Bengali story summary from plot",
+"word_count": 170
+}}
+"""
 
     models = ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-flash-latest"]
     for model in models:
@@ -310,58 +381,89 @@ Return ONLY a valid, raw JSON object. Do NOT include markdown code blocks, expla
                 if m:
                     j = json.loads(m.group())
                     voice = j.get("voiceover","").strip()
-                    caption = j.get("caption","").strip()
+                    story_bn = j.get("story_bn","").strip()
                     wc = len(voice.split())
-                    print(f"Gemini {model} OK - {wc} words")
-                    # If 140-160, still accept but log warning - better than failing all
-                    if wc < 140:
-                        print(f"Accepting short {wc} words (will be ~40-50s, usable)")
-                    if link not in caption:
-                        caption += f"\n\nLink: {link}"
-                    return voice, caption
+                    print(f"Gemini {model} OK - {wc} words story: {story_bn[:50]}")
+                    if wc < 90:
+                        print(f"Too short {wc}")
+                        continue
+                    if not story_bn or len(story_bn.split()) < 8:
+                        # Generate fallback story from overview
+                        story_bn = f"{overview[:120]} এক অসাধারণ গল্পের জগত!"
+                    return voice, story_bn, j.get("bangla_title", title_raw)
             print(f"Gemini {model} fail {res.status_code}")
         except Exception as e:
             print(f"Gemini {model} err {e}")
             continue
-    return None, None
+    
+    # Fallback
+    story_bn = "এক অসাধারণ রহস্যময় গল্পের জগত! প্রতিটা মুহূর্তে টানটান উত্তেজনা।"
+    voice = f"বন্ধুরা আজকে কথা বলবো {year} সালের সিনেমা {title_raw} নিয়ে। গল্পটা অসাধারণ।"
+    return voice, story_bn, title_raw
+
+def build_caption(title, year, m_type, genre_str, rating, story_bn, link):
+    # Exact format user wants from screenshot
+    type_label = "Series" if m_type == "tv" else "Movie"
+    caption = f"""🎬 {type_label} - {title}({year})
+🎭 Genres - {genre_str}
+⭐ Rating - {rating}/10
+📖 Story - {story_bn}
+🔗 ফুল মুভি লিংক: {link}
+👉 পুরো রিভিউ এবং ডাউনলোড পেতে ভিজিট করুন movimoon.online
+#MoviMoon #MovieReview #TrendingNow #MustWatch #BengaliReview #ViralReels
+#S #{title.replace(' ', '').replace('-', '')}"""
+    return caption
 
 async def generate_tts_voice(text, output_path="voice.mp3"):
-    print(f"TTS: {len(text.split())} words RATE +28%")
+    print(f"TTS: {len(text.split())} words RATE +28% STUDIO EFFECT")
     communicate = edge_tts.Communicate(text, VOICE, rate=RATE, pitch=PITCH, volume=VOLUME)
     await communicate.save(output_path)
     try:
-        loud_path = output_path.replace(".mp3", "_loud.mp3")
-        os.system(f'ffmpeg -y -i "{output_path}" -filter:a loudnorm=I=-14:TP=-1.5:LRA=11 "{loud_path}"')
-        if os.path.exists(loud_path):
-            os.replace(loud_path, output_path)
-    except:
-        pass
+        # STUDIO EFFECT: Professional chain - highpass, lowpass, compand, equalizer, reverb, loudnorm
+        loud_path = output_path.replace(".mp3", "_studio.mp3")
+        # Studio chain: highpass 80Hz, lowpass 12000Hz, compand for compression, aecho small reverb, equalizer boost presence, loudnorm
+        cmd = f'ffmpeg -y -i "{output_path}" -filter:a "highpass=f=80,lowpass=f=12000,compand=attacks=0:points=-80/-900|-45/-15|-27/-9|0/-7|20/-7:gain=3:volume=-60:delay=0.2,aecho=0.8:0.88:40:0.25,equalizer=f=3000:width_type=o:width=1.5:g=2,equalizer=f=100:width_type=o:width=1:g=-1,loudnorm=I=-14:TP=-1.0:LRA=7,volume=1.2" -c:a libmp3lame -q:a 1 "{loud_path}"'
+        subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
+        if Path(loud_path).exists() and Path(loud_path).stat().st_size > 1000:
+            Path(loud_path).replace(output_path)
+            print(f"Studio voice effect applied {Path(output_path).stat().st_size/1024:.1f} KB")
+        else:
+            # Fallback simple loudnorm
+            os.system(f'ffmpeg -y -i "{output_path}" -filter:a loudnorm=I=-14:TP=-1.5:LRA=11 "{loud_path}"')
+            if Path(loud_path).exists():
+                Path(loud_path).replace(output_path)
+    except Exception as e:
+        print(f"Studio effect err {e}")
     return output_path
 
-def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp4", bgm_path=None):
+def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp4", bgm_path=None, trailer_duration=60):
     try:
-        if Path(output).exists(): Path(output).unlink()
+        if Path(output).exists():
+            Path(output).unlink()
         has_bgm = bgm_path and Path(bgm_path).exists()
         if not has_bgm:
-            bgm_path = generate_local_cinematic_bgm("bgm.mp3", "cinematic", 65)
+            bgm_path = generate_local_cinematic_bgm("bgm.mp3", "cinematic", duration=trailer_duration)
             has_bgm = Path(bgm_path).exists()
         
-        # FIX: -loop only for image (poster), not for mp3. Use -stream_loop for bgm or no loop + aloop filter
+        # Dynamic duration - trailer_duration
+        dur = int(trailer_duration)
+        print(f"Creating {dur}s video - BGM vol 0.32 louder, trailer vol 0.12")
+        
         if poster_path and Path(poster_path).exists():
             cmd = (
-                f'ffmpeg -y -loop 1 -t 65 -i "{poster_path}" '
+                f'ffmpeg -y -loop 1 -t {dur} -i "{poster_path}" '
                 f'-i "{trailer_path}" -i "{voice_path}" -stream_loop -1 -i "{bgm_path}" '
                 f'-filter_complex "'
-                f'[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=18:steps=2,setsar=1,trim=duration=65[bg];'
+                f'[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=18:steps=2,setsar=1,trim=duration={dur}[bg];'
                 f'[1:v]scale=1080:800:force_original_aspect_ratio=increase,crop=1080:800[fg];'
                 f'[bg][fg]overlay=(W-w)/2:(H-h)/2:shortest=1:format=auto,scale=1080:1920:flags=lanczos[base];'
-                f'[1:a]volume=0.10[trailera];'
+                f'[1:a]volume=0.12[trailera];'
                 f'[2:a]volume=1.0,loudnorm=I=-14:TP=-1.5:LRA=11[voicea];'
-                f'[3:a]volume=0.22[bgma];'
-                f'[trailera][bgma][voicea]amix=inputs=3:duration=longest:dropout_transition=0:weights=0.1 0.22 1.0,volume=1.3,loudnorm=I=-14:TP=-1.5:LRA=11[a]" '
+                f'[3:a]volume=0.32[bgma];'
+                f'[trailera][bgma][voicea]amix=inputs=3:duration=longest:dropout_transition=0:weights=0.12 0.32 1.0,volume=1.3,loudnorm=I=-14:TP=-1.5:LRA=11[a]" '
                 f'-map "[base]" -map "[a]" '
                 f'-c:v libx264 -preset fast -crf 18 -pix_fmt yuv420p -r 30 '
-                f'-c:a aac -b:a 192k -t 65 "{output}"'
+                f'-c:a aac -b:a 192k -t {dur} "{output}"'
             )
         else:
             cmd = (
@@ -370,23 +472,24 @@ def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp
                 f'[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=18:steps=2[bg];'
                 f'[0:v]scale=1080:800:force_original_aspect_ratio=increase,crop=1080:800[fg];'
                 f'[bg][fg]overlay=(W-w)/2:(H-h)/2:shortest=1,scale=1080:1920:flags=lanczos[base];'
-                f'[0:a]volume=0.10[trailera];'
+                f'[0:a]volume=0.12[trailera];'
                 f'[1:a]volume=1.0,loudnorm=I=-14:TP=-1.5:LRA=11[voicea];'
-                f'[2:a]volume=0.22[bgma];'
-                f'[trailera][bgma][voicea]amix=inputs=3:duration=longest:dropout_transition=0:weights=0.1 0.22 1.0,volume=1.3[a]" '
+                f'[2:a]volume=0.32[bgma];'
+                f'[trailera][bgma][voicea]amix=inputs=3:duration=longest:dropout_transition=0:weights=0.12 0.32 1.0,volume=1.3[a]" '
                 f'-map "[base]" -map "[a]" '
                 f'-c:v libx264 -preset fast -crf 19 -pix_fmt yuv420p -r 30 '
-                f'-c:a aac -b:a 192k -t 65 "{output}"'
+                f'-c:a aac -b:a 192k -t {dur} "{output}"'
             )
-        print("FFmpeg 9:16 HD + BGM...")
+        print(f"FFmpeg {dur}s HD + LOUD BGM + STUDIO VOICE...")
         result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=180)
         if Path(output).exists() and Path(output).stat().st_size > 50000:
             print(f"Final OK {Path(output).stat().st_size/1024/1024:.2f} MB {get_video_duration(output):.1f}s")
             return output
-        print(f"FFmpeg err {result.stderr[-500:]}")
+        print(f"FFmpeg err {result.stderr[-800:]}")
         return None
     except Exception as e:
         print(f"9:16 Error {e}")
+        import traceback; traceback.print_exc()
         return None
 
 def upload_video_to_facebook(page_id, token, video_path, caption, label):
@@ -413,10 +516,10 @@ def build_movimoon_link(movie):
         return f"https://movimoon.online/movie/{tmdb_id}-{slug}", "movie"
 
 def main():
-    print("=== MAIN START V8 FAST ===")
+    print("=== MAIN START V10 NEW CAPTION+SMARTCUT+STUDIO ===")
     history = load_history()
     items = get_trending_mixed()
-    print(f"Found {len(items)} items, max 5")
+    print(f"Found {len(items)} items")
     for idx, movie in enumerate(items):
         try:
             tmdb_id = str(movie.get('id'))
@@ -429,27 +532,44 @@ def main():
             if not yt_url:
                 print(f"No trailer")
                 continue
-            title = title_raw
             year = (movie.get("release_date") or movie.get("first_air_date") or "2025")[:4]
             rating = round(movie.get("vote_average",0), 1)
-            overview = movie.get("overview","")[:600]
+            overview = movie.get("overview","")[:800]
             link, m_type = build_movimoon_link(movie)
-            voice_text, caption = call_gemini_video_script(title, year, m_type, rating, overview, link, movie=movie)
+            genre_en = get_genre_names(movie.get("genre_ids", []), english=True)
+            
+            voice_text, story_bn, bangla_title = call_gemini_video_script(title_raw, year, m_type, rating, overview, link, movie=movie)
             if not voice_text:
                 print(f"Gemini failed")
                 continue
+            
+            # Build new caption format exactly like screenshot
+            caption = build_caption(title_raw, year, m_type, genre_en, rating, story_bn, link)
+            print(f"Caption built:\n{caption[:300]}")
+            
             trailer_file = download_trailer(yt_url, "trailer.mp4")
             if not trailer_file:
-                print(f"Trailer download failed, skip")
+                print(f"Trailer download failed")
                 continue
+            
             poster_file = download_movie_poster(movie, "poster.jpg")
-            bgm_file = ensure_bgm("bgm.mp3", movie=movie)
-            trailer_60s = trim_trailer_to_60s(trailer_file, "trailer_60s.mp4")
+            
+            # Smart trim to 60s
+            trailer_60s = smart_trim_trailer_to_60s(trailer_file, "trailer_60s.mp4")
+            trailer_dur = get_video_duration(trailer_60s)
+            print(f"Trailer final {trailer_dur:.1f}s")
+            
+            # BGM same duration as trailer
+            bgm_file = ensure_bgm("bgm.mp3", movie=movie, duration=int(trailer_dur))
+            
+            # Studio voice
             asyncio.run(generate_tts_voice(voice_text, "voice.mp3"))
-            print(f"Voice {get_video_duration('voice.mp3'):.1f}s Trailer {get_video_duration(trailer_60s):.1f}s BGM {get_video_duration(bgm_file):.1f}s")
-            final_video = create_9_16_hd_video(trailer_60s, poster_file, "voice.mp3", "final.mp4", bgm_path=bgm_file)
+            print(f"Voice {get_video_duration('voice.mp3'):.1f}s Trailer {trailer_dur:.1f}s BGM {get_video_duration(bgm_file):.1f}s")
+            
+            final_video = create_9_16_hd_video(trailer_60s, poster_file, "voice.mp3", "final.mp4", bgm_path=bgm_file, trailer_duration=int(trailer_dur))
             if not final_video:
                 continue
+            
             success = False
             if FB_PAGE_ID and FB_PAGE_TOKEN:
                 resp = upload_video_to_facebook(FB_PAGE_ID, FB_PAGE_TOKEN, final_video, caption, "PAGE")
@@ -463,7 +583,7 @@ def main():
             if success:
                 history[tmdb_id] = datetime.now().isoformat()
                 save_history(history)
-            for f in ["trailer.mp4","trailer_60s.mp4","voice.mp3","final.mp4","poster.jpg","bgm.mp3"]:
+            for f in ["trailer.mp4","trailer_60s.mp4","voice.mp3","final.mp4","poster.jpg","bgm.mp3","seg_0.mp4","seg_1.mp4","seg_2.mp4","seg_3.mp4","seg_4.mp4","seg_5.mp4","concat.txt"]:
                 if os.path.exists(f):
                     try: os.remove(f)
                     except: pass
