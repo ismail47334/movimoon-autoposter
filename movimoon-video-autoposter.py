@@ -2,7 +2,7 @@ import os, requests, random, re, time, asyncio, json, subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
 
-print("=== MoviMoon Bot - FINAL V27 STABLE | V17 DOWNLOAD FIX + 165-170 WORDS + ZOOM 65% + TRAILER ONLY + TEXT FIX ===")
+print("=== MoviMoon Bot - FINAL V28 HD 1080p | DOWNLOAD HD + ZOOM 65% + TEXT FIX + UPLOAD HD ===")
 
 try:
     import edge_tts
@@ -165,7 +165,7 @@ def get_video_duration(video_path):
         return 0
 
 def download_via_ytdlp_fixed(youtube_url, output="trailer.mp4"):
-    print(f"YT-DLP START HD 1080p HD 1080p {youtube_url}")
+    print(f"YT-DLP START HD 1080p {youtube_url}")
     Path(output).unlink(missing_ok=True)
     cookie_arg = ""
     if Path("cookies.txt").exists() and Path("cookies.txt").stat().st_size > 100:
@@ -547,7 +547,7 @@ def build_caption(title, year, m_type, genre_str, rating, story_bn, link):
     return caption
 
 async def generate_tts_voice(text, output_path="voice.mp3"):
-    print(f"TTS: {len(text.split())} words RATE +28% PRO STUDIO V25 165-170 WORDS")
+    print(f"TTS: {len(text.split())} words RATE +28% PRO STUDIO V28 HD 1080p")
     communicate = edge_tts.Communicate(text, VOICE, rate=RATE, pitch=PITCH, volume=VOLUME)
     await communicate.save(output_path)
     try:
@@ -589,7 +589,13 @@ def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp
             has_bgm = Path(bgm_path).exists()
         dur = int(trailer_duration)
         safe_title = sanitize_drawtext(title_text)
-        print(f"Creating {dur}s video FINAL V24 ZOOM 65% 165-170 TRAILER ONLY - Title: {safe_title}")
+        # FIX: Define font_path properly
+        font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+        if not Path(font_path).exists():
+            font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+            if not Path(font_path).exists():
+                font_path = "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
+        print(f"Creating {dur}s video FINAL V28 HD 1080p ZOOM 65% - Title: {safe_title} Font: {font_path} Exists:{Path(font_path).exists()}")
         if poster_path and Path(poster_path).exists():
             cmd = (
                 f"ffmpeg -y -loop 1 -t {dur} -i \"{poster_path}\" "
@@ -623,7 +629,7 @@ def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp
                 f"[trailer_low][ducked][voice_mix]amix=inputs=3:duration=longest:dropout_transition=0:weights=0.30 0.35 1,volume=1.25,loudnorm=I=-16:TP=-1.5:LRA=8[a]\" "
                 f"-map \"[final_v]\" -map \"[a]\" -c:v libx264 -profile:v high -level:v 4.2 -preset slow -crf 16 -pix_fmt yuv420p -r 30 -movflags +faststart -c:a aac -b:a 192k -t {dur} \"{output}\""
             )
-        print(f"FFmpeg FINAL V25 {dur}s...")
+        print(f"FFmpeg FINAL V28 HD {dur}s...")
         result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=240)
         if Path(output).exists() and Path(output).stat().st_size > 50000:
             print(f"Final OK V25 {Path(output).stat().st_size/1024/1024:.2f} MB - ZOOM 65% + 165-170 + TRAILER ONLY")
@@ -643,7 +649,7 @@ def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp
             return output
         return None
     except Exception as e:
-        print(f"V25 Error {e}")
+        print(f"V28 Error {e}")
         import traceback; traceback.print_exc()
         return None
 
@@ -665,7 +671,7 @@ def upload_video_to_facebook(page_id, token, video_path, caption, label):
         return None
 
 async def main():
-    print("=== MoviMoon AutoPoster V27 HD 1080p START ===")
+    print("=== MoviMoon AutoPoster V28 HD 1080p START ===")
     history = load_history()
     movies = get_trending_mixed()
     if not movies:
