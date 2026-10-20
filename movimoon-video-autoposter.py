@@ -2,7 +2,7 @@ import os, requests, random, re, time, asyncio, json, subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
 
-print("=== MoviMoon Bot - FINAL V29 HD 1080p | PAGE ONLY SUCCESS + GROUP OPTIONAL + 1 VIDEO PER RUN ===")
+print("=== MoviMoon Bot - FINAL V28 HD 1080p | DOWNLOAD HD + ZOOM 65% + TEXT FIX + UPLOAD HD + PAGE ONLY SUCCESS ===")
 
 try:
     import edge_tts
@@ -671,7 +671,7 @@ def upload_video_to_facebook(page_id, token, video_path, caption, label):
         return None
 
 async def main():
-    print("=== MoviMoon AutoPoster V29 HD PAGE ONLY SUCCESS START ===")
+    print("=== MoviMoon AutoPoster V28 HD 1080p START ===")
     history = load_history()
     movies = get_trending_mixed()
     if not movies:
@@ -730,38 +730,24 @@ async def main():
                 continue
             fb_result = upload_video_to_facebook(FB_PAGE_ID, FB_PAGE_TOKEN, final_video, caption, title)
             if fb_result:
-                # PAGE SUCCESS = FULL SUCCESS (Group optional)
+                # V28 EXACT + ONLY FIX: PAGE SUCCESS = WORK DONE
                 print(f"✅ PAGE POSTED SUCCESSFULLY - ID: {fb_result.get('id','unknown')}")
                 history[tmdb_id] = datetime.now().isoformat()
                 save_history(history)
-                print(f"Posted {title} successfully - History saved")
-                
-                # GROUP POSTING - OPTIONAL, never fail main job if group fails
+                print(f"Posted {title} successfully")
+                # GROUP OPTIONAL - fail holeo page success = work done
                 if FB_GROUP_ID and FB_GROUP_ID.strip():
                     try:
-                        print(f"Attempting optional group post for {FB_GROUP_ID}...")
-                        group_result = upload_video_to_facebook(FB_GROUP_ID, FB_PAGE_TOKEN, final_video, caption, f"{title} Group")
+                        print(f"Attempting group post for {FB_GROUP_ID}...")
+                        group_result = upload_video_to_facebook(FB_GROUP_ID, FB_PAGE_TOKEN, final_video, caption, f"{title}")
                         if group_result:
-                            print(f"✅ GROUP ALSO POSTED - ID: {group_result.get('id','unknown')}")
+                            print(f"✅ GROUP POSTED - ID: {group_result.get('id','unknown')}")
                         else:
-                            print(f"⚠️ Group post failed/skip but PAGE is SUCCESS - continuing as SUCCESS")
+                            print(f"⚠️ Group post failed but PAGE SUCCESS - WORK DONE as SUCCESS")
                     except Exception as ge:
-                        print(f"⚠️ Group post exception (ignored): {ge} - PAGE SUCCESS still counts")
-                else:
-                    print(f"No FB_GROUP_ID set, skipping group (PAGE only mode)")
-                
-                # After 1 successful post, exit workflow - prevents timeout and repeated tries
-                print(f"🎉 1 VIDEO DONE - Exiting workflow successfully")
-                # Cleanup before exit
-                for f in ["trailer.mp4", "trailer_60s.mp4", "poster.jpg", "voice.mp3", "bgm.mp3", "final.mp4"]:
-                    try:
-                        if Path(f).exists():
-                            Path(f).unlink()
-                    except:
-                        pass
-                break  # Exit loop after 1 success
+                        print(f"⚠️ Group error ignored: {ge} - PAGE SUCCESS = WORK DONE")
             else:
-                print(f"❌ Failed to post {title} to PAGE - trying next movie")
+                print(f"Failed to post {title}")
             # Cleanup
             for f in ["trailer.mp4", "trailer_60s.mp4", "poster.jpg", "voice.mp3", "bgm.mp3", "final.mp4"]:
                 try:
@@ -775,7 +761,7 @@ async def main():
             print(f"Error processing movie {movie.get('id')}: {e}")
             import traceback; traceback.print_exc()
             continue
-    print("=== MoviMoon AutoPoster V29 END ===")
+    print("=== MoviMoon AutoPoster V28 END ===")
 
 if __name__ == "__main__":
     asyncio.run(main())
