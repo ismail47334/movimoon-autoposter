@@ -2,7 +2,7 @@ import os, requests, random, re, time, asyncio, json, subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
 
-print("=== MoviMoon Bot - FINAL V17 STABLE | GEMINI 3.5 + GROQ FALLBACK + 165WORDS GUARANTEED ===")
+print("=== MoviMoon Bot - FINAL V24 | 165-170 WORDS + TRAILER ONLY + ZOOM 65% + DOT ONLINE ===")
 
 try:
     import edge_tts
@@ -121,12 +121,37 @@ def get_youtube_trailer(movie):
     url = f"https://api.themoviedb.org/3/{m_type}/{tmdb_id}/videos?api_key={TMDB_API_KEY}&language=en-US"
     try:
         r = requests.get(url, timeout=10).json()
-        for v in r.get('results', []):
+        results = r.get('results', [])
+        def is_valid_trailer(v):
+            if v.get('site') != 'YouTube':
+                return False
+            v_type = v.get('type','').lower()
+            name = v.get('name','').lower()
+            block_keywords = ['muhurat', 'mahurat', 'muhurath', 'making', 'behind', 'bts', 'featurette', 'interview', 'clip', 'scene', 'song', 'lyrical', 'audio', 'first look', 'announcement', 'motion poster', 'poster', 'greeting', 'launch', 'event']
+            for kw in block_keywords:
+                if kw in name:
+                    return False
+            if v_type in ['trailer', 'teaser']:
+                return True
+            return False
+        valid = [v for v in results if is_valid_trailer(v)]
+        def sort_key(v):
+            type_order = 0 if v.get('type')=='Trailer' else 1
+            official = 0 if v.get('official') else 1
+            return (type_order, official)
+        valid_sorted = sorted(valid, key=sort_key)
+        if valid_sorted:
+            v = valid_sorted[0]
+            print(f"Trailer selected: {v.get('name')} | Type: {v.get('type')} | Official: {v.get('official')}")
+            return f"https://www.youtube.com/watch?v={v['key']}", v['key']
+        for v in results:
             if v.get('site')=='YouTube' and v.get('type')=='Trailer':
-                return f"https://www.youtube.com/watch?v={v['key']}", v['key']
-        for v in r.get('results', []):
-            if v.get('site')=='YouTube':
-                return f"https://www.youtube.com/watch?v={v['key']}", v['key']
+                lname = v.get('name','').lower()
+                if 'muhurat' not in lname and 'mahurat' not in lname and 'making' not in lname:
+                    print(f"Fallback Trailer: {v.get('name')} | {v.get('type')}")
+                    return f"https://www.youtube.com/watch?v={v['key']}", v['key']
+        print(f"No valid Trailer found for {tmdb_id}, skipping muhurat/making videos")
+        return None, None
     except Exception as e:
         print(f"Trailer API Error: {e}")
     return None, None
@@ -147,9 +172,10 @@ def download_via_ytdlp_fixed(youtube_url, output="trailer.mp4"):
         cookie_arg = "--cookies cookies.txt"
         print("Using cookies.txt")
     strategies = [
-        f'yt-dlp {cookie_arg} -f "best[height<=720][ext=mp4]/best[height<=720]/best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --force-ipv4 --no-warnings -q --retries 1 --fragment-retries 1',
-        f'yt-dlp {cookie_arg} --extractor-args "youtube:player_client=android" -f "best[height<=720]/best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --force-ipv4 --no-warnings -q --retries 1',
-        f'yt-dlp {cookie_arg} -f "worstvideo[height>=360]+worstaudio/worst" -o "{output}" "{youtube_url}" --no-playlist --force-ipv4 --no-warnings -q --retries 1',
+        f'yt-dlp {cookie_arg} -f "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best[height<=1080]" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --force-ipv4 --no-warnings -q --retries 2 --fragment-retries 2',
+        f'yt-dlp {cookie_arg} -f "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --force-ipv4 --no-warnings -q --retries 2 --fragment-retries 2',
+        f'yt-dlp {cookie_arg} --extractor-args "youtube:player_client=android" -f "best[height<=1080]/best[height<=720]/best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --force-ipv4 --no-warnings -q --retries 2',
+        f'yt-dlp {cookie_arg} -f "worstvideo[height>=480]+worstaudio/worst" -o "{output}" "{youtube_url}" --no-playlist --force-ipv4 --no-warnings -q --retries 1',
     ]
     for i, cmd in enumerate(strategies, 1):
         try:
@@ -179,7 +205,7 @@ def download_movie_poster(movie, output="poster.jpg"):
         poster_path = movie.get("poster_path")
         if not poster_path:
             return None
-        url = f"https://image.tmdb.org/t/p/w780{poster_path}"
+        url = f"https://image.tmdb.org/t/p/w1280{poster_path}"
         r = requests.get(url, timeout=20)
         if r.status_code == 200:
             with open(output, 'wb') as f:
@@ -310,7 +336,6 @@ def smart_trim_trailer_to_60s(input_path, output_path="trailer_60s.mp4"):
         import traceback; traceback.print_exc()
         return input_path
 
-
 def call_groq_fallback(movie_title, year, m_type, rating, overview, link, genre_str):
     if not GROQ_API_KEY or not GROQ_AVAILABLE:
         print("Groq not available")
@@ -318,67 +343,22 @@ def call_groq_fallback(movie_title, year, m_type, rating, overview, link, genre_
     try:
         client = Groq(api_key=GROQ_API_KEY)
         title = movie_title
-        prompt = f"""You are the Senior Bengali Voiceover Director & Lead Scriptwriter for MoviMoon.
-Your core objective is to write an engaging, dramatic, and precise 60-second Bengali video narration script based on the provided movie details.
-
-### CRITICAL REQUIREMENTS (WORD COUNT):
-- STRICT WORD COUNT: EXACTLY between 165 and 180 Bengali words. 
-- UNDER NO CIRCUMSTANCES should the word count be less than 165 words (Short scripts cause audio timing failure).
-- Do a strict self-count before generating the final JSON response.
-- CRITICAL WARNING: If the voiceover is under 165 words, it is considered a COMPLETE FAILURE. You must expand the descriptions, add emotional depth, and elaborate on the plot details until the word count strictly hits between 165 and 180 words. NEVER return under 165 words.
-
-### INPUT DATA:
-- Movie Title: {title}
-- Release Year: {year}
-- Rating: {rating}/10
-- Genre: {genre_str}
-- Overview/Plot: {overview}
-- Movie Link: {link}
-
-### SCRIPT STRUCTURE & TIMING BREAKDOWN:
-1. HOOK (0-10s) -> [28 to 30 words]: High energy opening to grab attention instantly.
-2. STORY PLOT (10-30s) -> [55 to 60 words]: Brief, intriguing core synopsis without spoilers.
-3. ACTING & VISUALS (30-50s) -> [50 to 55 words]: Critique of performance, direction, atmosphere, or climax setup.
-4. CALL TO ACTION / OUTRO (50-60s) -> [25 to 30 words]: Wrap up with rating mention and direct audience to watch on MoviMoon via the link.
-
-### LANGUAGE RULES:
-1. 100% Pure Bengali text using proper Bengali punctuation (। , ! ?).
-2. NO English words, letters, or numbers in the "voiceover" text (Transliterate English titles/numbers into Bengali, e.g., 8.5 -> ৮.৫ or সাড়ে আট).
-3. Transliterate the movie title cleanly into Bengali for "bangla_title".
-4. Tone: Energetic, dramatic, and professional cinema narrator voice.
-
-### REQUIRED OUTPUT FORMAT:
-Return ONLY a valid, raw JSON object. Do NOT include markdown code blocks, explanations, or extra text.
-
-{{
-  "voiceover": "১৬৫ থেকে ১৮০ শব্দের পূর্ণাঙ্গ বাংলা ভয়েসওভার টেক্সট...",
-  "bangla_title": "বাংলায় মুভির নাম",
-  "caption": "আকর্ষণীয় সোশ্যাল মিডিয়া ক্যাপশন উইথ হ্যাশট্যাগ",
-  "word_count": 172
-}}"""
-        groq_prompt = prompt
+        prompt = f"""You are the Senior Bengali Voiceover Director for MoviMoon.
+STRICT WORD COUNT: EXACTLY 165-170 Bengali words. Max 170, never over 170. 60 seconds voice.
+Movie Title: {title} Year: {year} Rating: {rating}/10 Genre: {genre_str} Plot: {overview} Link: {link}
+STRUCTURE: HOOK 28-30 words, STORY 55-60, ACTING 50-55, CTA 20-25 words. TOTAL 165-170.
+RULES: Pure Bengali, no English. Say "মুভিমুন ডট অনলাইন" not "মুভিমুন অনলাইন ডট কম". In outro say "পুরো সিনেমাটি দেখতে ভিজিট করুন মুভিমুন ডট অনলাইন".
+OUTPUT ONLY JSON: {{"voiceover": "165-170 words Bengali...", "bangla_title": "title", "caption": "...", "word_count": 168}}"""
         groq_models = ["llama-3.3-70b-specdec", "llama-3.3-70b-versatile", "meta-llama/llama-4-maverick-17b-128e-instruct", "meta-llama/llama-4-scout-17b-16e-instruct", "qwen/qwen3-32b", "moonshotai/kimi-k2-instruct", "llama3-70b-8192", "llama3-8b-8192", "openai/gpt-oss-20b", "openai/gpt-oss-120b"]
         completion = None
         last_err = None
         for gmodel in groq_models:
             try:
                 print(f"Trying Groq model {gmodel}...")
-                # gpt-oss models don't support json_object format
                 if "gpt-oss" in gmodel:
-                    completion = client.chat.completions.create(
-                        model=gmodel,
-                        messages=[{"role": "user", "content": groq_prompt}],
-                        temperature=1.0,
-                        max_tokens=3000
-                    )
+                    completion = client.chat.completions.create(model=gmodel, messages=[{"role": "user", "content": prompt}], temperature=1.0, max_tokens=3000)
                 else:
-                    completion = client.chat.completions.create(
-                        model=gmodel,
-                        messages=[{"role": "user", "content": groq_prompt}],
-                        temperature=1.0,
-                        max_tokens=3000,
-                        response_format={"type": "json_object"}
-                    )
+                    completion = client.chat.completions.create(model=gmodel, messages=[{"role": "user", "content": prompt}], temperature=1.0, max_tokens=3000, response_format={"type": "json_object"})
                 print(f"Groq model {gmodel} success")
                 break
             except Exception as ge:
@@ -393,6 +373,9 @@ Return ONLY a valid, raw JSON object. Do NOT include markdown code blocks, expla
         voice = j.get("voiceover","").strip()
         story_bn = j.get("caption","").strip() or j.get("story_bn","").strip()
         wc = len(voice.split())
+        if wc > 170:
+            voice = " ".join(voice.split()[:170])
+            wc = 170
         print(f"Groq SUCCESS - {wc} words")
         if not story_bn:
             story_bn = f"{overview[:100]} এক অসাধারণ গল্প!"
@@ -402,64 +385,26 @@ Return ONLY a valid, raw JSON object. Do NOT include markdown code blocks, expla
         import traceback; traceback.print_exc()
         return None, None, None
 
-
 def call_gemini_video_script(title, year, m_type, rating, overview, link, movie=None):
     genre_str = get_genre_names(movie.get("genre_ids", []) if movie else [], english=True)
     title_raw = title
     if not GEMINI_API_KEY and not GROQ_API_KEY:
-        story_bn = "এক অসাধারণ রহস্যময় গল্পের জগত! বাবার মৃত্যুর পর এক তরুণী নানা প্রতিকূলতার মুখোমুখি হয়।"
-        voice = f"বন্ধুরা কেমন আছেন সবাই আজকে কথা বলবো {year} সালের আলোচিত সিনেমা নিয়ে।"
+        story_bn = "এক অসাধারণ রহস্যময় গল্পের জগত!"
+        voice = f"বন্ধুরা আজকে কথা বলবো {year} সালের সিনেমা {title_raw} নিয়ে।"
         return voice, story_bn, title_raw
 
-    prompt = f"""You are the Senior Bengali Voiceover Director & Lead Scriptwriter for MoviMoon.
-Your core objective is to write an engaging, dramatic, and precise 60-second Bengali video narration script based on the provided movie details.
+    prompt = f"""You are the Senior Bengali Voiceover Director for MoviMoon.
+CRITICAL WORD COUNT: EXACTLY 165-170 Bengali words. Max 170, never over 170. For 60 seconds.
+If under 165 or over 170 = FAILURE.
 
-### CRITICAL REQUIREMENTS (WORD COUNT):
-- STRICT WORD COUNT: EXACTLY between 165 and 180 Bengali words. 
-- UNDER NO CIRCUMSTANCES should the word count be less than 165 words (Short scripts cause audio timing failure).
-- Do a strict self-count before generating the final JSON response.
-- CRITICAL WARNING: If the voiceover is under 165 words, it is considered a COMPLETE FAILURE. You must expand the descriptions, add emotional depth, and elaborate on the plot details until the word count strictly hits between 165 and 180 words. NEVER return under 165 words.
+INPUT: Movie Title: {title} Year: {year} Rating: {rating}/10 Genre: {genre_str} Plot: {overview} Link: {link}
+STRUCTURE: HOOK 28-30 words, STORY 55-60, ACTING 50-55, CTA 20-25. TOTAL 165-170.
+RULES: Pure Bengali, no English. Say "মুভিমুন ডট অনলাইন" not "মুভিমুন অনলাইন ডট কম". In outro MUST say "পুরো সিনেমাটি দেখতে ভিজিট করুন মুভিমুন ডট অনলাইন".
+OUTPUT ONLY JSON: {{"voiceover": "165-170 words...", "bangla_title": "title", "caption": "...", "word_count": 168}}"""
 
-### INPUT DATA:
-- Movie Title: {title}
-- Release Year: {year}
-- Rating: {rating}/10
-- Genre: {genre_str}
-- Overview/Plot: {overview}
-- Movie Link: {link}
+    models = ["gemini-3.5-flash-lite", "gemini-3.5-flash"]
 
-### SCRIPT STRUCTURE & TIMING BREAKDOWN:
-1. HOOK (0-10s) -> [28 to 30 words]: High energy opening to grab attention instantly.
-2. STORY PLOT (10-30s) -> [55 to 60 words]: Brief, intriguing core synopsis without spoilers.
-3. ACTING & VISUALS (30-50s) -> [50 to 55 words]: Critique of performance, direction, atmosphere, or climax setup.
-4. CALL TO ACTION / OUTRO (50-60s) -> [25 to 30 words]: Wrap up with rating mention and direct audience to watch on MoviMoon via the link.
-
-### LANGUAGE RULES:
-1. 100% Pure Bengali text using proper Bengali punctuation (। , ! ?).
-2. NO English words, letters, or numbers in the "voiceover" text (Transliterate English titles/numbers into Bengali, e.g., 8.5 -> ৮.৫ or সাড়ে আট).
-3. Transliterate the movie title cleanly into Bengali for "bangla_title".
-4. Tone: Energetic, dramatic, and professional cinema narrator voice.
-5. WEBSITE NAME CRITICAL: ALWAYS say "মুভিমুন ডট অনলাইন" (movimoon dot online). NEVER say "মুভিমুন অনলাইন ডট কম" or "movimoon.com". It is strictly "মুভিমুন ডট অনলাইন".
-
-### CALL TO ACTION MUST INCLUDE:
-- In OUTRO, you MUST say exactly: "পুরো সিনেমাটি দেখতে ভিজিট করুন মুভিমুন ডট অনলাইন" - Do NOT say "মুভিমুন অনলাইন ডট কম".
-
-### REQUIRED OUTPUT FORMAT:
-Return ONLY a valid, raw JSON object. Do NOT include markdown code blocks, explanations, or extra text.
-
-{{
-  "voiceover": "১৬৫ থেকে ১৮০ শব্দের পূর্ণাঙ্গ বাংলা ভয়েসওভার টেক্সট...",
-  "bangla_title": "বাংলায় মুভির নাম",
-  "caption": "আকর্ষণীয় সোশ্যাল মিডিয়া ক্যাপশন উইথ হ্যাশট্যাগ",
-  "word_count": 172
-}}"""
-
-    models = [
-        "gemini-3.5-flash-lite", 
-        "gemini-3.5-flash",
-    ]
-
-    def smart_expand_to_limit(current_voice, current_wc, target_min=165, target_max=185):
+    def smart_expand_to_limit(current_voice, current_wc, target_min=165, target_max=170):
         expansions = [
             "প্রতিটি দৃশ্য অসাধারণভাবে সাজানো হয়েছে।",
             "পরিচালকের মুন্সিয়ানা মুগ্ধ করবে।",
@@ -510,23 +455,18 @@ Return ONLY a valid, raw JSON object. Do NOT include markdown code blocks, expla
                     story_bn = j.get("caption","").strip() or j.get("story_bn","").strip()
                     wc = len(voice.split())
                     print(f"Gemini {model} OK - {wc} words story: {story_bn[:60]}")
-
-                    # === USER REQUESTED LOOP ===
                     if wc < 165:
                         current_voice = voice
                         current_wc = wc
                         loop_attempt = 1
                         max_loops = 3
                         while current_wc < 165 and loop_attempt <= max_loops:
-                            print(f"Loop {loop_attempt}: Gemini gave only {current_wc} words, asking to expand previous {current_wc} words to 180-185")
+                            print(f"Loop {loop_attempt}: Gemini gave only {current_wc} words, asking to expand previous to 165-170")
                             try:
-                                expand_prompt = f"""You previously gave only {current_wc} words, which is too short. Need 180-185 words.
-Your previous text: {current_voice}
-
-TASK: Expand the above text to EXACTLY 180-185 Bengali words. Keep all previous content, add more details about acting, direction, cinematography, music, climax.
-You said {current_wc} words, now make it 180-185 words full.
+                                expand_prompt = f"""You gave only {current_wc} words, need 165-170. Your previous text: {current_voice}
+TASK: Expand to EXACTLY 165-170 Bengali words. Keep all content, add acting/direction/music. Current {current_wc} -> need 165-170.
 MUST say "মুভিমুন ডট অনলাইন" not "মুভিমুন অনলাইন ডট কম".
-Output ONLY JSON: {{"voiceover": "180-185 words Bengali...", "bangla_title": "title", "caption": "...", "word_count": 182}}"""
+OUTPUT ONLY JSON: {{"voiceover": "165-170 words...", "bangla_title": "title", "caption": "...", "word_count": 168}}"""
                                 data_loop = {"contents":[{"parts":[{"text":expand_prompt}]}], "generationConfig":{"temperature":0.7, "topP":0.9, "maxOutputTokens": 4096, "response_mime_type": "application/json"}}
                                 res_loop = requests.post(url, json=data_loop, timeout=30)
                                 if res_loop.status_code == 200:
@@ -539,39 +479,34 @@ Output ONLY JSON: {{"voiceover": "180-185 words Bengali...", "bangla_title": "ti
                                         voice_loop = j_loop.get("voiceover","").strip()
                                         wc_loop = len(voice_loop.split())
                                         print(f"Loop {loop_attempt} result: {current_wc} -> {wc_loop} words")
-                                        if wc_loop >= 165 and wc_loop <= 185:
+                                        if wc_loop >= 165 and wc_loop <= 170:
                                             print(f"Loop {loop_attempt} SUCCESS: {wc_loop} words")
                                             return voice_loop, story_bn, j_loop.get("bangla_title", title_raw)
-                                        if wc_loop > 185:
-                                            print(f"Loop {loop_attempt} too long {wc_loop} -> trimming to 185")
-                                            voice_loop = " ".join(voice_loop.split()[:185])
+                                        if wc_loop > 170:
+                                            print(f"Loop {loop_attempt} too long {wc_loop} -> trimming to 170")
+                                            voice_loop = " ".join(voice_loop.split()[:170])
                                             return voice_loop, story_bn, j_loop.get("bangla_title", title_raw)
-                                        # Still short, continue
                                         current_voice = voice_loop
                                         current_wc = wc_loop
                                         loop_attempt += 1
                                     else:
-                                        print(f"Loop {loop_attempt} no JSON")
                                         loop_attempt += 1
                                 else:
-                                    print(f"Loop {loop_attempt} fail {res_loop.status_code}")
                                     loop_attempt += 1
                             except Exception as e:
                                 print(f"Loop {loop_attempt} error: {e}")
                                 loop_attempt += 1
-
                         if current_wc < 165:
-                            print(f"After {max_loops} loops still {current_wc} words, fallback for remaining {165-current_wc} words (cap 185)")
-                            voice, wc = smart_expand_to_limit(current_voice, current_wc, 165, 185)
+                            print(f"After {max_loops} loops still {current_wc} words, fallback for remaining (cap 170)")
+                            voice, wc = smart_expand_to_limit(current_voice, current_wc, 165, 170)
                             print(f"After fallback: {wc} words")
                         else:
                             voice = current_voice
                             wc = current_wc
-
-                    if wc > 185:
-                        print(f"Final trim {wc} -> 185")
-                        voice = " ".join(voice.split()[:185])
-                        wc = 185
+                    if wc > 170:
+                        print(f"Final trim {wc} -> 170")
+                        voice = " ".join(voice.split()[:170])
+                        wc = 170
                     if not story_bn:
                         story_bn = f"{overview[:120]} এক অসাধারণ গল্পের জগত!"
                     return voice, story_bn, j.get("bangla_title", title_raw)
@@ -582,20 +517,16 @@ Output ONLY JSON: {{"voiceover": "180-185 words Bengali...", "bangla_title": "ti
         except Exception as e:
             print(f"Gemini {model} err {e}")
             continue
-
     print("All Gemini models failed, trying Groq fallback...")
     groq_voice, groq_story, groq_title = call_groq_fallback(title_raw, year, m_type, rating, overview, link, genre_str)
     if groq_voice:
         return groq_voice, groq_story, groq_title
-
     story_bn = "এক অসাধারণ রহস্যময় গল্পের জগত!"
-    voice = f"বন্ধুরা আজকে কথা বলবো {year} সালের সিনেমা {title_raw} নিয়ে। এই সিনেমার গল্পটা এতটাই অসাধারণ যে একবার দেখা শুরু করলে শেষ না করে উঠতে পারবেন না। প্রধান চরিত্রের অভিনয় এবং পরিচালনা দুর্দান্ত। গল্পের প্রতিটি মোড়ে রয়েছে চমক। প্রধান অভিনেতার অসাধারণ পারফরম্যান্স আপনাকে মুগ্ধ করবে। পরিচালকের মুন্সিয়ানা এবং সিনেমাটোগ্রাফি অসাধারণ। আবহ সঙ্গীত গল্পটিকে আরও প্রাণবন্ত করে তুলেছে। বিশেষ করে শেষের চমকটা আপনার মাথা ঘুরিয়ে দেবে। যারা থ্রিলার এবং ড্রামা পছন্দ করেন তাদের জন্য এটা অবশ্যই দেখার মতো। পুরো রিভিউ পেতে ভিজিট করুন মুভিমুন ডট অনলাইন। এই সিনেমাটি আপনাদের মন ছুঁয়ে যাবে। প্রতিটা মুহূর্ত টানটান উত্তেজনায় ভরা। এখনই দেখুন।"
+    voice = f"বন্ধুরা আজকে কথা বলবো {year} সালের সিনেমা {title_raw} নিয়ে।"
     return voice, story_bn, title_raw
-
 
 def build_caption(title, year, m_type, genre_str, rating, story_bn, link):
     type_label = "Series" if m_type == "tv" else "Movie"
-    # story_bn may already be full caption from Gemini
     if len(story_bn) > 100 or "#" in story_bn:
         story_text = story_bn
     else:
@@ -604,7 +535,7 @@ def build_caption(title, year, m_type, genre_str, rating, story_bn, link):
     return caption
 
 async def generate_tts_voice(text, output_path="voice.mp3"):
-    print(f"TTS: {len(text.split())} words RATE +28% PRO STUDIO V13 NO ROBOTIC")
+    print(f"TTS: {len(text.split())} words RATE +28% PRO STUDIO V25 165-170 WORDS")
     communicate = edge_tts.Communicate(text, VOICE, rate=RATE, pitch=PITCH, volume=VOLUME)
     await communicate.save(output_path)
     try:
@@ -625,7 +556,18 @@ async def generate_tts_voice(text, output_path="voice.mp3"):
         import traceback; traceback.print_exc()
     return output_path
 
-def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp4", bgm_path=None, trailer_duration=60):
+def sanitize_drawtext(text):
+    if not text:
+        return "Movie"
+    text = str(text)
+    # Avoid problematic chars
+    text = text.replace("'", " ").replace('"', " ").replace(":", " ").replace("\n", " ").replace("\r", " ")
+    text = " ".join(text.split())
+    if len(text) > 45:
+        text = text[:42] + "..."
+    return text.strip() or "Movie"
+
+def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp4", bgm_path=None, trailer_duration=60, title_text="MoviMoon"):
     try:
         if Path(output).exists():
             Path(output).unlink()
@@ -634,153 +576,163 @@ def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp
             bgm_path = generate_local_cinematic_bgm("bgm.mp3", "cinematic", duration=trailer_duration)
             has_bgm = Path(bgm_path).exists()
         dur = int(trailer_duration)
-        print(f"Creating {dur}s video V13 SIDECHAIN DUCKING - BGM auto ducks when voice speaks")
+        safe_title = sanitize_drawtext(title_text)
+        print(f"Creating {dur}s video FINAL V24 ZOOM 65% 165-170 TRAILER ONLY - Title: {safe_title}")
         if poster_path and Path(poster_path).exists():
             cmd = (
-                f'ffmpeg -y -loop 1 -t {dur} -i "{poster_path}" '
-                f'-i "{trailer_path}" -i "{voice_path}" -stream_loop -1 -i "{bgm_path}" '
-                f'-filter_complex "'
-                f'[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=20:steps=2,setsar=1,trim=duration={dur}[bg];'
-                f'[1:v]scale=1080:800:force_original_aspect_ratio=increase,crop=1080:800[fg];'
-                f'[bg][fg]overlay=(W-w)/2:(H-h)/2:shortest=1:format=auto,scale=1080:1920:flags=lanczos[base];'
-                f'[1:a]volume=0.08[trailer_low];'
-                f'[3:a]volume=0.40[bg_vol];'
-                f'[2:a]asplit=2[voice_sc][voice_mix];'
-                f'[bg_vol][voice_sc]sidechaincompress=threshold=0.015:ratio=8:attack=20:release=400:makeup=1[ducked];'
-                f'[trailer_low][ducked][voice_mix]amix=inputs=3:duration=longest:dropout_transition=0:weights=0.08 0.35 1,volume=1.25,loudnorm=I=-16:TP=-1.5:LRA=8[a]" '
-                f'-map "[base]" -map "[a]" '
-                f'-c:v libx264 -preset fast -crf 18 -pix_fmt yuv420p -r 30 '
-                f'-c:a aac -b:a 192k -t {dur} "{output}"'
+                f"ffmpeg -y -loop 1 -t {dur} -i \"{poster_path}\" "
+                f"-i \"{trailer_path}\" -i \"{voice_path}\" -stream_loop -1 -i \"{bgm_path}\" "
+                f"-filter_complex \"[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=22:steps=3,setsar=1,trim=duration={dur}[bg];"
+                f"[1:v]scale=1080:1248:force_original_aspect_ratio=increase,crop=1080:1248,setsar=1[fg];"
+                f"[bg][fg]overlay=(W-w)/2:(H-h)/2:shortest=0,scale=1080:1920:flags=lanczos[base0];"
+                f"[base0]drawtext=text='{safe_title}':fontcolor=white:fontsize=66:box=1:boxcolor=black@0.75:boxborderw=16:borderw=4:bordercolor=black:"
+                f"x=(w-text_w)/2:y=120+4*sin(t*1.8):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[base1];"
+                f"[base1]drawtext=text='{safe_title}':fontcolor=white@0.25:fontsize=66:x=(w-text_w)/2+2:y=122+4*sin(t*1.8):fontfile={font_path}[base_top];"
+                f"[base_top]drawtext=text='movimoon.online':fontcolor=yellow:fontsize=52:box=1:boxcolor=black@0.75:boxborderw=14:borderw=3:bordercolor=black:"
+                f"x=(w-text_w)/2:y=h-160-4*sin(t*2.2):shadowcolor=black:shadowx=3:shadowy=3:fontfile={font_path}[final_v];"
+                f"[1:a]volume=0.30[trailer_low];[3:a]volume=0.40[bg_vol];[2:a]asplit=2[voice_sc][voice_mix];"
+                f"[bg_vol][voice_sc]sidechaincompress=threshold=0.015:ratio=8:attack=20:release=400:makeup=1[ducked];"
+                f"[trailer_low][ducked][voice_mix]amix=inputs=3:duration=longest:dropout_transition=0:weights=0.30 0.35 1,volume=1.25,loudnorm=I=-16:TP=-1.5:LRA=8[a]\" "
+                f"-map \"[final_v]\" -map \"[a]\" -c:v libx264 -profile:v high -level:v 4.2 -preset slow -crf 16 -pix_fmt yuv420p -r 30 -movflags +faststart -c:a aac -b:a 192k -t {dur} \"{output}\""
             )
         else:
             cmd = (
-                f'ffmpeg -y -i "{trailer_path}" -i "{voice_path}" -stream_loop -1 -i "{bgm_path}" '
-                f'-filter_complex "'
-                f'[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=20:steps=2[bg];'
-                f'[0:v]scale=1080:800:force_original_aspect_ratio=increase,crop=1080:800[fg];'
-                f'[bg][fg]overlay=(W-w)/2:(H-h)/2:shortest=1,scale=1080:1920:flags=lanczos[base];'
-                f'[0:a]volume=0.08[trailer_low];'
-                f'[2:a]volume=0.40[bg_vol];'
-                f'[1:a]asplit=2[voice_sc][voice_mix];'
-                f'[bg_vol][voice_sc]sidechaincompress=threshold=0.015:ratio=8:attack=20:release=400:makeup=1[ducked];'
-                f'[trailer_low][ducked][voice_mix]amix=inputs=3:duration=longest:dropout_transition=0:weights=0.08 0.35 1,volume=1.25,loudnorm=I=-16:TP=-1.5:LRA=8[a]" '
-                f'-map "[base]" -map "[a]" '
-                f'-c:v libx264 -preset fast -crf 19 -pix_fmt yuv420p -r 30 '
-                f'-c:a aac -b:a 192k -t {dur} "{output}"'
+                f"ffmpeg -y -i \"{trailer_path}\" -i \"{voice_path}\" -stream_loop -1 -i \"{bgm_path}\" "
+                f"-filter_complex \"[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=22:steps=3[bg];"
+                f"[0:v]scale=1080:1248:force_original_aspect_ratio=increase,crop=1080:1248[fg];"
+                f"[bg][fg]overlay=(W-w)/2:(H-h)/2,scale=1080:1920:flags=lanczos[base0];"
+                f"[base0]drawtext=text='{safe_title}':fontcolor=white:fontsize=66:box=1:boxcolor=black@0.75:boxborderw=16:borderw=4:bordercolor=black:"
+                f"x=(w-text_w)/2:y=120+4*sin(t*1.8):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[base1];"
+                f"[base1]drawtext=text='{safe_title}':fontcolor=white@0.25:fontsize=66:x=(w-text_w)/2+2:y=122+4*sin(t*1.8):fontfile={font_path}[base_top];"
+                f"[base_top]drawtext=text='movimoon.online':fontcolor=yellow:fontsize=52:box=1:boxcolor=black@0.75:boxborderw=14:borderw=3:bordercolor=black:"
+                f"x=(w-text_w)/2:y=h-160-4*sin(t*2.2):shadowcolor=black:shadowx=3:shadowy=3:fontfile={font_path}[final_v];"
+                f"[0:a]volume=0.30[trailer_low];[2:a]volume=0.40[bg_vol];[1:a]asplit=2[voice_sc][voice_mix];"
+                f"[bg_vol][voice_sc]sidechaincompress=threshold=0.015:ratio=8:attack=20:release=400:makeup=1[ducked];"
+                f"[trailer_low][ducked][voice_mix]amix=inputs=3:duration=longest:dropout_transition=0:weights=0.30 0.35 1,volume=1.25,loudnorm=I=-16:TP=-1.5:LRA=8[a]\" "
+                f"-map \"[final_v]\" -map \"[a]\" -c:v libx264 -profile:v high -level:v 4.2 -preset slow -crf 16 -pix_fmt yuv420p -r 30 -movflags +faststart -c:a aac -b:a 192k -t {dur} \"{output}\""
             )
-        print(f"FFmpeg V13 SIDECHAIN DUCKING {dur}s...")
-        result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=180)
+        print(f"FFmpeg FINAL V25 {dur}s...")
+        result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=240)
         if Path(output).exists() and Path(output).stat().st_size > 50000:
-            print(f"Final OK V13 {Path(output).stat().st_size/1024/1024:.2f} MB {get_video_duration(output):.1f}s - Voice clear, BGM ducks automatically")
+            print(f"Final OK V25 {Path(output).stat().st_size/1024/1024:.2f} MB - ZOOM 65% + 165-170 + TRAILER ONLY")
             return output
-        print(f"FFmpeg err {result.stderr[-1000:]}")
+        print(f"FFmpeg err {result.stderr[-1500:]}")
         fallback_cmd = (
             f'ffmpeg -y -loop 1 -t {dur} -i "{poster_path}" -i "{trailer_path}" -i "{voice_path}" -stream_loop -1 -i "{bgm_path}" '
-            f'-filter_complex "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=18[bg];[1:v]scale=1080:800[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2[base];[1:a]volume=0.08[tl];[3:a]volume=0.30[bgv];[2:a]volume=1.0[vo];[tl][bgv][vo]amix=inputs=3:duration=longest:weights=0.08 0.30 1,volume=1.2[a]" '
-            f'-map "[base]" -map "[a]" -c:v libx264 -preset fast -crf 18 -pix_fmt yuv420p -r 30 -c:a aac -b:a 192k -t {dur} "{output}"'
+            f'-filter_complex "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=20[bg];[1:v]scale=1080:1248:force_original_aspect_ratio=increase,crop=1080:1248[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2[base];[1:a]volume=0.30[tl];[3:a]volume=0.30[bgv];[2:a]volume=1.0[vo];[tl][bgv][vo]amix=inputs=3:duration=longest:weights=0.30 0.30 1,volume=1.2[a]" '
+            f'-map "[base]" -map "[a]" -c:v libx264 -preset slow -crf 17 -pix_fmt yuv420p -r 30 -movflags +faststart -c:a aac -b:a 192k -t {dur} "{output}"'
         ) if poster_path and Path(poster_path).exists() else (
             f'ffmpeg -y -i "{trailer_path}" -i "{voice_path}" -stream_loop -1 -i "{bgm_path}" '
-            f'-filter_complex "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=18[bg];[0:v]scale=1080:800[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2[base];[0:a]volume=0.08[tl];[2:a]volume=0.30[bgv];[1:a]volume=1.0[vo];[tl][bgv][vo]amix=inputs=3:duration=longest:weights=0.08 0.30 1,volume=1.2[a]" '
-            f'-map "[base]" -map "[a]" -c:v libx264 -preset fast -crf 19 -pix_fmt yuv420p -r 30 -c:a aac -b:a 192k -t {dur} "{output}"'
+            f'-filter_complex "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=20[bg];[0:v]scale=1080:1248:force_original_aspect_ratio=increase,crop=1080:1248[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2[base];[0:a]volume=0.30[tl];[2:a]volume=0.30[bgv];[1:a]volume=1.0[vo];[tl][bgv][vo]amix=inputs=3:duration=longest:weights=0.30 0.30 1,volume=1.2[a]" '
+            f'-map "[base]" -map "[a]" -c:v libx264 -preset slow -crf 17 -pix_fmt yuv420p -r 30 -movflags +faststart -c:a aac -b:a 192k -t {dur} "{output}"'
         )
-        subprocess.run(fallback_cmd, shell=True, capture_output=True, timeout=180)
+        subprocess.run(fallback_cmd, shell=True, capture_output=True, timeout=240)
         if Path(output).exists():
             return output
         return None
     except Exception as e:
-        print(f"V13 Error {e}")
+        print(f"V25 Error {e}")
         import traceback; traceback.print_exc()
         return None
 
 def upload_video_to_facebook(page_id, token, video_path, caption, label):
     try:
-        url = f"https://graph.facebook.com/v19.0/{page_id}/videos"
+        print(f"Uploading {label} - {Path(video_path).stat().st_size/1024/1024:.2f} MB")
+        url = f"https://graph.facebook.com/v18.0/{page_id}/videos"
         with open(video_path, 'rb') as f:
             files = {'source': f}
             data = {'description': caption, 'access_token': token}
             r = requests.post(url, files=files, data=data, timeout=300)
-            print(f"{label}: {r.status_code}")
-            return r
+            print(f"FB Upload {label} Status {r.status_code} {r.text[:500]}")
+            if r.status_code == 200:
+                return r.json()
+        return None
     except Exception as e:
-        print(f"FB Error: {e}")
+        print(f"FB Upload Error {e}")
+        import traceback; traceback.print_exc()
         return None
 
-def build_movimoon_link(movie):
-    tmdb_id = movie.get("id")
-    title = movie.get("title") or movie.get("name") or "untitled"
-    slug = slugify(title)
-    media_type = movie.get("media_type")
-    if media_type == "tv":
-        return f"https://movimoon.online/tv/{tmdb_id}-{slug}", media_type
-    else:
-        return f"https://movimoon.online/movie/{tmdb_id}-{slug}", "movie"
-
-def main():
-    print("=== MAIN START FINAL V17 ===")
+async def main():
+    print("=== MoviMoon AutoPoster V24 START ===")
     history = load_history()
-    items = get_trending_mixed()
-    print(f"Found {len(items)} items")
-    for idx, movie in enumerate(items):
+    movies = get_trending_mixed()
+    if not movies:
+        print("No movies found")
+        return
+    for idx, movie in enumerate(movies[:10], 1):
         try:
-            tmdb_id = str(movie.get('id'))
-            title_raw = movie.get('title') or movie.get('name') or "Unknown"
-            print(f"\n>>> [{idx+1}/{len(items)}] {title_raw} ({tmdb_id})")
-            if is_already_posted(tmdb_id, history, days=30):
-                print(f"SKIPPED")
+            tmdb_id = str(movie['id'])
+            if is_already_posted(tmdb_id, history):
+                print(f"[{idx}/10] Already posted {tmdb_id}, skipping")
                 continue
-            yt_url, yt_key = get_youtube_trailer(movie)
-            if not yt_url:
-                print(f"No trailer")
+            title = movie.get('title') or movie.get('name') or 'Unknown'
+            title_raw = title
+            print(f">>> [{idx}/10] {title} ({tmdb_id})")
+            date_str = movie.get('release_date') or movie.get('first_air_date') or ''
+            year = date_str[:4] if date_str else str(datetime.now().year)
+            m_type = movie.get('media_type','movie')
+            rating = movie.get('vote_average', 7.0)
+            overview = movie.get('overview','') or 'An extraordinary story.'
+            genre_ids = movie.get('genre_ids', [])
+            genre_str = get_genre_names(genre_ids)
+            link = f"https://movimoon.online/movie/{tmdb_id}-{slugify(title)}" if m_type=='movie' else f"https://movimoon.online/tv/{tmdb_id}-{slugify(title)}"
+            youtube_url, yt_key = get_youtube_trailer(movie)
+            if not youtube_url:
+                print(f"No trailer for {title}, skipping")
                 continue
-            year = (movie.get("release_date") or movie.get("first_air_date") or "2025")[:4]
-            rating = round(movie.get("vote_average",0), 1)
-            overview = movie.get("overview","")[:800]
-            link, m_type = build_movimoon_link(movie)
-            genre_en = get_genre_names(movie.get("genre_ids", []), english=True)
-            voice_text, story_bn, bangla_title = call_gemini_video_script(title_raw, year, m_type, rating, overview, link, movie=movie)
-            if not voice_text:
-                print(f"Gemini failed")
-                continue
-            caption = build_caption(title_raw, year, m_type, genre_en, rating, story_bn, link)
-            print(f"Caption built:\n{caption[:300]}")
-            trailer_file = download_trailer(yt_url, "trailer.mp4")
+            print(f"Trailer URL: {youtube_url}")
+            trailer_file = download_trailer(youtube_url, "trailer.mp4")
             if not trailer_file:
-                print(f"Trailer download failed")
+                print(f"Trailer download failed for {title}")
                 continue
             poster_file = download_movie_poster(movie, "poster.jpg")
+            voice_text, story_bn, bangla_title = call_gemini_video_script(title, year, m_type, rating, overview, link, movie)
+            wc = len(voice_text.split())
+            if wc > 170:
+                voice_text = " ".join(voice_text.split()[:170])
+                wc = 170
+                print(f"Trimmed voice to 170 words for 60s (was {len(voice_text.split())} -> 170)")
+            if wc < 165:
+                print(f"WARNING: Voice still {wc} words < 165, adding fallback")
+                # quick fallback add
+                voice_text = voice_text + " এই সিনেমাটি অবশ্যই দেখার মতো। গল্পটা মন ছুঁয়ে যাবে।"
+                voice_text = " ".join(voice_text.split()[:170])
+                wc = len(voice_text.split())
+            print(f"Voice {wc} words (target 165-170)")
+            caption = build_caption(title, year, m_type, genre_str, rating, story_bn, link)
+            print(f"Caption built: {caption[:200]}")
+            await generate_tts_voice(voice_text, "voice.mp3")
+            trailer_dur = get_video_duration(trailer_file)
             trailer_60s = smart_trim_trailer_to_60s(trailer_file, "trailer_60s.mp4")
             trailer_dur = get_video_duration(trailer_60s)
-            print(f"Trailer final {trailer_dur:.1f}s")
-            bgm_file = ensure_bgm("bgm.mp3", movie=movie, duration=int(trailer_dur))
-            asyncio.run(generate_tts_voice(voice_text, "voice.mp3"))
-            print(f"Voice {get_video_duration('voice.mp3'):.1f}s Trailer {trailer_dur:.1f}s BGM {get_video_duration(bgm_file):.1f}s")
-            final_video = create_9_16_hd_video(trailer_60s, poster_file, "voice.mp3", "final.mp4", bgm_path=bgm_file, trailer_duration=int(trailer_dur))
-            if not final_video:
+            bgm_file = ensure_bgm("bgm.mp3", movie, duration=int(trailer_dur))
+            final_video = create_9_16_hd_video(trailer_60s, poster_file, "voice.mp3", "final.mp4", bgm_path=bgm_file, trailer_duration=int(trailer_dur), title_text=title_raw)
+            if not final_video or not Path(final_video).exists():
+                print(f"Final video creation failed for {title}")
                 continue
-            success = False
-            if FB_PAGE_ID and FB_PAGE_TOKEN:
-                resp = upload_video_to_facebook(FB_PAGE_ID, FB_PAGE_TOKEN, final_video, caption, "PAGE")
-                if resp and resp.status_code == 200:
-                    success = True
-                    print("PAGE SUCCESS")
-            if FB_GROUP_ID and FB_PAGE_TOKEN and success:
-                time.sleep(3)
-                resp2 = upload_video_to_facebook(FB_GROUP_ID, FB_PAGE_TOKEN, final_video, caption, "GROUP")
-                print(f"GROUP {resp2.status_code if resp2 else 'fail'}")
-            if success:
+            fb_result = upload_video_to_facebook(FB_PAGE_ID, FB_PAGE_TOKEN, final_video, caption, title)
+            if fb_result:
                 history[tmdb_id] = datetime.now().isoformat()
                 save_history(history)
-            for f in ["trailer.mp4","trailer_60s.mp4","voice.mp3","final.mp4","poster.jpg","bgm.mp3","seg_0.mp4","seg_1.mp4","seg_2.mp4","seg_3.mp4","seg_4.mp4","seg_5.mp4","concat.txt"]:
-                if os.path.exists(f):
-                    try: os.remove(f)
-                    except: pass
-            print("Done 1 video exit")
-            break
+                print(f"Posted {title} successfully")
+                if FB_GROUP_ID:
+                    print(f"Group posting not implemented yet for {FB_GROUP_ID}")
+            else:
+                print(f"Failed to post {title}")
+            # Cleanup
+            for f in ["trailer.mp4", "trailer_60s.mp4", "poster.jpg", "voice.mp3", "bgm.mp3", "final.mp4"]:
+                try:
+                    if Path(f).exists():
+                        Path(f).unlink()
+                except:
+                    pass
+            print(f"Waiting 10s before next...")
+            await asyncio.sleep(10)
         except Exception as e:
-            print(f"MAIN ERROR: {e}")
+            print(f"Error processing movie {movie.get('id')}: {e}")
             import traceback; traceback.print_exc()
             continue
-    print("=== MAIN END ===")
+    print("=== MoviMoon AutoPoster V24 END ===")
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
