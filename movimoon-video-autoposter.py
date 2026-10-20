@@ -147,9 +147,10 @@ def download_via_ytdlp_fixed(youtube_url, output="trailer.mp4"):
         cookie_arg = "--cookies cookies.txt"
         print("Using cookies.txt")
     strategies = [
-        f'yt-dlp {cookie_arg} -f "best[height<=720][ext=mp4]/best[height<=720]/best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --force-ipv4 --no-warnings -q --retries 1 --fragment-retries 1',
-        f'yt-dlp {cookie_arg} --extractor-args "youtube:player_client=android" -f "best[height<=720]/best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --force-ipv4 --no-warnings -q --retries 1',
-        f'yt-dlp {cookie_arg} -f "worstvideo[height>=360]+worstaudio/worst" -o "{output}" "{youtube_url}" --no-playlist --force-ipv4 --no-warnings -q --retries 1',
+        f'yt-dlp {cookie_arg} -f "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best[height<=1080]" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --force-ipv4 --no-warnings -q --retries 2 --fragment-retries 2',
+        f'yt-dlp {cookie_arg} -f "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --force-ipv4 --no-warnings -q --retries 2 --fragment-retries 2',
+        f'yt-dlp {cookie_arg} --extractor-args "youtube:player_client=android" -f "best[height<=1080]/best[height<=720]/best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --force-ipv4 --no-warnings -q --retries 2',
+        f'yt-dlp {cookie_arg} -f "worstvideo[height>=480]+worstaudio/worst" -o "{output}" "{youtube_url}" --no-playlist --force-ipv4 --no-warnings -q --retries 1',
     ]
     for i, cmd in enumerate(strategies, 1):
         try:
@@ -179,7 +180,7 @@ def download_movie_poster(movie, output="poster.jpg"):
         poster_path = movie.get("poster_path")
         if not poster_path:
             return None
-        url = f"https://image.tmdb.org/t/p/w780{poster_path}"
+        url = f"https://image.tmdb.org/t/p/w1280{poster_path}"
         r = requests.get(url, timeout=20)
         if r.status_code == 200:
             with open(output, 'wb') as f:
@@ -624,8 +625,8 @@ def sanitize_drawtext(text):
     for ch in ["'", '"', ":", "\n", "\r"]:
         text = text.replace(ch, " ")
     text = " ".join(text.split())
-    if len(text) > 40:
-        text = text[:37] + "..."
+    if len(text) > 45:
+        text = text[:42] + "..."
     return text.strip() or "Movie"
 
 def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp4", bgm_path=None, trailer_duration=60, title_text="MoviMoon"):
@@ -638,70 +639,61 @@ def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp
             has_bgm = Path(bgm_path).exists()
         dur = int(trailer_duration)
         safe_title = sanitize_drawtext(title_text)
-        print(f"Creating {dur}s video FINAL V19.1 TEXT FIXED - Title: {safe_title} | Voice 100% Trailer 30%")
+        print(f"Creating {dur}s video FINAL V20 HD ZOOM NO BLACK - Title: {safe_title} | Voice 100% Trailer 30%")
         if poster_path and Path(poster_path).exists():
             cmd = (
                 f"ffmpeg -y -loop 1 -t {dur} -i \"{poster_path}\" "
                 f"-i \"{trailer_path}\" -i \"{voice_path}\" -stream_loop -1 -i \"{bgm_path}\" "
-                f"-filter_complex \""
-                f"[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=20:steps=2,setsar=1,trim=duration={dur}[bg];"
-                f"[1:v]scale=1080:800:force_original_aspect_ratio=increase,crop=1080:800[fg];"
-                f"[bg][fg]overlay=(W-w)/2:(H-h)/2:shortest=1:format=auto,scale=1080:1920:flags=lanczos[base];"
-                f"[base]drawtext=text='{safe_title}':fontcolor=white:fontsize=62:box=1:boxcolor=black@0.6:boxborderw=14:borderw=3:bordercolor=black:"
-                f"x=(w-text_w)/2:y=200:shadowcolor=black:shadowx=3:shadowy=3:fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf[base_top];"
-                f"[base_top]drawtext=text='movimoon.online':fontcolor=yellow:fontsize=48:box=1:boxcolor=black@0.65:boxborderw=12:borderw=2:bordercolor=black:"
-                f"x=(w-text_w)/2:y=h-220:shadowcolor=black:shadowx=2:shadowy=2:fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf[final_v];"
-                f"[1:a]volume=0.30[trailer_low];"
-                f"[3:a]volume=0.40[bg_vol];"
-                f"[2:a]asplit=2[voice_sc][voice_mix];"
+                f"-filter_complex \"[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=22:steps=3,setsar=1,trim=duration={dur}[bg];"
+                f"[1:v]scale=1080:1280:force_original_aspect_ratio=increase,crop=1080:1280,setsar=1[fg];"
+                f"[bg][fg]overlay=(W-w)/2:(H-h)/2:shortest=0,scale=1080:1920:flags=lanczos[base0];"
+                f"[base0]drawtext=text='{safe_title}':fontcolor=white:fontsize=66:box=1:boxcolor=black@0.75:boxborderw=16:borderw=4:bordercolor=black:"
+                f"x=(w-text_w)/2:y=120+5*sin(t*1.2):shadowcolor=black:shadowx=4:shadowy=4:fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf[base1];"
+                f"[base1]drawtext=text='{safe_title}':fontcolor=white@0.25:fontsize=66:x=(w-text_w)/2+2:y=122+5*sin(t*1.2):fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf[base_top];"
+                f"[base_top]drawtext=text='movimoon.online':fontcolor=yellow:fontsize=52:box=1:boxcolor=black@0.75:boxborderw=14:borderw=3:bordercolor=black:"
+                f"x=(w-text_w)/2:y=h-160-3*sin(t*2):shadowcolor=black:shadowx=3:shadowy=3:fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf[final_v];"
+                f"[1:a]volume=0.30[trailer_low];[3:a]volume=0.40[bg_vol];[2:a]asplit=2[voice_sc][voice_mix];"
                 f"[bg_vol][voice_sc]sidechaincompress=threshold=0.015:ratio=8:attack=20:release=400:makeup=1[ducked];"
                 f"[trailer_low][ducked][voice_mix]amix=inputs=3:duration=longest:dropout_transition=0:weights=0.30 0.35 1,volume=1.25,loudnorm=I=-16:TP=-1.5:LRA=8[a]\" "
-                f"-map \"[final_v]\" -map \"[a]\" "
-                f"-c:v libx264 -preset fast -crf 18 -pix_fmt yuv420p -r 30 "
-                f"-c:a aac -b:a 192k -t {dur} \"{output}\""
+                f"-map \"[final_v]\" -map \"[a]\" -c:v libx264 -profile:v high -level:v 4.2 -preset slow -crf 16 -pix_fmt yuv420p -r 30 -movflags +faststart -c:a aac -b:a 192k -t {dur} \"{output}\""
             )
         else:
             cmd = (
                 f"ffmpeg -y -i \"{trailer_path}\" -i \"{voice_path}\" -stream_loop -1 -i \"{bgm_path}\" "
-                f"-filter_complex \""
-                f"[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=20:steps=2[bg];"
-                f"[0:v]scale=1080:800:force_original_aspect_ratio=increase,crop=1080:800[fg];"
-                f"[bg][fg]overlay=(W-w)/2:(H-h)/2:shortest=1,scale=1080:1920:flags=lanczos[base];"
-                f"[base]drawtext=text='{safe_title}':fontcolor=white:fontsize=62:box=1:boxcolor=black@0.6:boxborderw=14:borderw=3:bordercolor=black:"
-                f"x=(w-text_w)/2:y=200:shadowcolor=black:shadowx=3:shadowy=3:fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf[base_top];"
-                f"[base_top]drawtext=text='movimoon.online':fontcolor=yellow:fontsize=48:box=1:boxcolor=black@0.65:boxborderw=12:borderw=2:bordercolor=black:"
-                f"x=(w-text_w)/2:y=h-220:shadowcolor=black:shadowx=2:shadowy=2:fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf[final_v];"
-                f"[0:a]volume=0.30[trailer_low];"
-                f"[2:a]volume=0.40[bg_vol];"
-                f"[1:a]asplit=2[voice_sc][voice_mix];"
+                f"-filter_complex \"[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=22:steps=3[bg];"
+                f"[0:v]scale=1080:1280:force_original_aspect_ratio=increase,crop=1080:1280[fg];"
+                f"[bg][fg]overlay=(W-w)/2:(H-h)/2,scale=1080:1920:flags=lanczos[base0];"
+                f"[base0]drawtext=text='{safe_title}':fontcolor=white:fontsize=66:box=1:boxcolor=black@0.75:boxborderw=16:borderw=4:bordercolor=black:"
+                f"x=(w-text_w)/2:y=120+5*sin(t*1.2):shadowcolor=black:shadowx=4:shadowy=4:fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf[base1];"
+                f"[base1]drawtext=text='{safe_title}':fontcolor=white@0.25:fontsize=66:x=(w-text_w)/2+2:y=122+5*sin(t*1.2):fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf[base_top];"
+                f"[base_top]drawtext=text='movimoon.online':fontcolor=yellow:fontsize=52:box=1:boxcolor=black@0.75:boxborderw=14:borderw=3:bordercolor=black:"
+                f"x=(w-text_w)/2:y=h-160-3*sin(t*2):shadowcolor=black:shadowx=3:shadowy=3:fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf[final_v];"
+                f"[0:a]volume=0.30[trailer_low];[2:a]volume=0.40[bg_vol];[1:a]asplit=2[voice_sc][voice_mix];"
                 f"[bg_vol][voice_sc]sidechaincompress=threshold=0.015:ratio=8:attack=20:release=400:makeup=1[ducked];"
                 f"[trailer_low][ducked][voice_mix]amix=inputs=3:duration=longest:dropout_transition=0:weights=0.30 0.35 1,volume=1.25,loudnorm=I=-16:TP=-1.5:LRA=8[a]\" "
-                f"-map \"[final_v]\" -map \"[a]\" "
-                f"-c:v libx264 -preset fast -crf 19 -pix_fmt yuv420p -r 30 "
-                f"-c:a aac -b:a 192k -t {dur} \"{output}\""
+                f"-map \"[final_v]\" -map \"[a]\" -c:v libx264 -profile:v high -level:v 4.2 -preset slow -crf 16 -pix_fmt yuv420p -r 30 -movflags +faststart -c:a aac -b:a 192k -t {dur} \"{output}\""
             )
-        print(f"FFmpeg FINAL V19.1 TEXT FIXED {dur}s...")
-        result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=180)
+        print(f"FFmpeg FINAL V20 HD ZOOM {dur}s...")
+        result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=240)
         if Path(output).exists() and Path(output).stat().st_size > 50000:
-            print(f"Final OK V19.1 TEXT {Path(output).stat().st_size/1024/1024:.2f} MB")
+            print(f"Final OK V20 HD ZOOM {Path(output).stat().st_size/1024/1024:.2f} MB - NO BLACK + TEXT EFFECT + HD")
             return output
-        print(f"FFmpeg err {result.stderr[-1000:]}")
-        print("Fallback without text...")
+        print(f"FFmpeg err {result.stderr[-1500:]}")
         fallback_cmd = (
             f'ffmpeg -y -loop 1 -t {dur} -i "{poster_path}" -i "{trailer_path}" -i "{voice_path}" -stream_loop -1 -i "{bgm_path}" '
-            f'-filter_complex "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=18[bg];[1:v]scale=1080:800[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2[base];[1:a]volume=0.30[tl];[3:a]volume=0.30[bgv];[2:a]volume=1.0[vo];[tl][bgv][vo]amix=inputs=3:duration=longest:weights=0.30 0.30 1,volume=1.2[a]" '
-            f'-map "[base]" -map "[a]" -c:v libx264 -preset fast -crf 18 -pix_fmt yuv420p -r 30 -c:a aac -b:a 192k -t {dur} "{output}"'
+            f'-filter_complex "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=20[bg];[1:v]scale=1080:1280:force_original_aspect_ratio=increase,crop=1080:1280[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2[base];[1:a]volume=0.30[tl];[3:a]volume=0.30[bgv];[2:a]volume=1.0[vo];[tl][bgv][vo]amix=inputs=3:duration=longest:weights=0.30 0.30 1,volume=1.2[a]" '
+            f'-map "[base]" -map "[a]" -c:v libx264 -preset slow -crf 17 -pix_fmt yuv420p -r 30 -movflags +faststart -c:a aac -b:a 192k -t {dur} "{output}"'
         ) if poster_path and Path(poster_path).exists() else (
             f'ffmpeg -y -i "{trailer_path}" -i "{voice_path}" -stream_loop -1 -i "{bgm_path}" '
-            f'-filter_complex "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=18[bg];[0:v]scale=1080:800[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2[base];[0:a]volume=0.30[tl];[2:a]volume=0.30[bgv];[1:a]volume=1.0[vo];[tl][bgv][vo]amix=inputs=3:duration=longest:weights=0.30 0.30 1,volume=1.2[a]" '
-            f'-map "[base]" -map "[a]" -c:v libx264 -preset fast -crf 19 -pix_fmt yuv420p -r 30 -c:a aac -b:a 192k -t {dur} "{output}"'
+            f'-filter_complex "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=20[bg];[0:v]scale=1080:1280:force_original_aspect_ratio=increase,crop=1080:1280[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2[base];[0:a]volume=0.30[tl];[2:a]volume=0.30[bgv];[1:a]volume=1.0[vo];[tl][bgv][vo]amix=inputs=3:duration=longest:weights=0.30 0.30 1,volume=1.2[a]" '
+            f'-map "[base]" -map "[a]" -c:v libx264 -preset slow -crf 17 -pix_fmt yuv420p -r 30 -movflags +faststart -c:a aac -b:a 192k -t {dur} "{output}"'
         )
-        subprocess.run(fallback_cmd, shell=True, capture_output=True, timeout=180)
+        subprocess.run(fallback_cmd, shell=True, capture_output=True, timeout=240)
         if Path(output).exists():
             return output
         return None
     except Exception as e:
-        print(f"V19.1 Error {e}")
+        print(f"V20 Error {e}")
         import traceback; traceback.print_exc()
         return None
 
