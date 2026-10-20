@@ -730,25 +730,36 @@ async def main():
                 continue
             fb_result = upload_video_to_facebook(FB_PAGE_ID, FB_PAGE_TOKEN, final_video, caption, title)
             if fb_result:
-                # V28 EXACT + ONLY FIX: PAGE SUCCESS = WORK DONE
+                # V28 + FIX: PAGE POSTED = WORKFLOW DONE, no 2nd try
                 print(f"✅ PAGE POSTED SUCCESSFULLY - ID: {fb_result.get('id','unknown')}")
                 history[tmdb_id] = datetime.now().isoformat()
                 save_history(history)
-                print(f"Posted {title} successfully")
-                # GROUP OPTIONAL - fail holeo page success = work done
+                print(f"Posted {title} successfully - PAGE ONLY SUCCESS = WORK DONE")
+                # GROUP OPTIONAL - fail holeo page success = done
                 if FB_GROUP_ID and FB_GROUP_ID.strip():
                     try:
-                        print(f"Attempting group post for {FB_GROUP_ID}...")
+                        print(f"Attempting optional group post for {FB_GROUP_ID}...")
                         group_result = upload_video_to_facebook(FB_GROUP_ID, FB_PAGE_TOKEN, final_video, caption, f"{title}")
                         if group_result:
-                            print(f"✅ GROUP POSTED - ID: {group_result.get('id','unknown')}")
+                            print(f"✅ GROUP ALSO POSTED - ID: {group_result.get('id','unknown')}")
                         else:
-                            print(f"⚠️ Group post failed but PAGE SUCCESS - WORK DONE as SUCCESS")
+                            print(f"⚠️ Group failed but PAGE SUCCESS - WORK DONE")
                     except Exception as ge:
                         print(f"⚠️ Group error ignored: {ge} - PAGE SUCCESS = WORK DONE")
+                else:
+                    print(f"No FB_GROUP_ID, PAGE ONLY mode - WORK DONE")
+                # Cleanup
+                for f in ["trailer.mp4", "trailer_60s.mp4", "poster.jpg", "voice.mp3", "bgm.mp3", "final.mp4"]:
+                    try:
+                        if Path(f).exists():
+                            Path(f).unlink()
+                    except:
+                        pass
+                print(f"🎉 1 VIDEO DONE - WORKFLOW COMPLETE - STOPPING, NO 2nd TRY")
+                break
             else:
                 print(f"Failed to post {title}")
-            # Cleanup
+            # Cleanup for failed case
             for f in ["trailer.mp4", "trailer_60s.mp4", "poster.jpg", "voice.mp3", "bgm.mp3", "final.mp4"]:
                 try:
                     if Path(f).exists():
