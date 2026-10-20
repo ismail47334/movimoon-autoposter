@@ -359,7 +359,8 @@ def call_groq_fallback(movie_title, year, m_type, rating, overview, link, genre_
 STRICT WORD COUNT: EXACTLY 165-170 Bengali words. Max 170, never over 170. 60 seconds voice.
 Movie Title: {title} Year: {year} Rating: {rating}/10 Genre: {genre_str} Plot: {overview} Link: {link}
 STRUCTURE: HOOK 28-30 words, STORY 55-60, ACTING 50-55, CTA 20-25 words. TOTAL 165-170.
-RULES: Pure Bengali, no English. Say "মুভিমুন ডট অনলাইন" not "মুভিমুন অনলাইন ডট কম". In outro say "পুরো সিনেমাটি দেখতে ভিজিট করুন মুভিমুন ডট অনলাইন".
+RULES: Pure Bengali, no English. Say "মুভিমুন ডট অনলাইন" not "মুভিমুন অনলাইন ডট কম". 
+In outro must say "পুরো সিনেমাটি দেখতে ভিজিট করুন মুভিমুন ডট অনলাইন".
 OUTPUT ONLY JSON: {{"voiceover": "165-170 words Bengali...", "bangla_title": "title", "caption": "...", "word_count": 168}}"""
         groq_models = ["llama-3.3-70b-specdec", "llama-3.3-70b-versatile", "meta-llama/llama-4-maverick-17b-128e-instruct", "meta-llama/llama-4-scout-17b-16e-instruct", "qwen/qwen3-32b", "moonshotai/kimi-k2-instruct", "llama3-70b-8192", "llama3-8b-8192", "openai/gpt-oss-20b", "openai/gpt-oss-120b"]
         completion = None
@@ -411,7 +412,8 @@ If under 165 or over 170 = FAILURE.
 
 INPUT: Movie Title: {title} Year: {year} Rating: {rating}/10 Genre: {genre_str} Plot: {overview} Link: {link}
 STRUCTURE: HOOK 28-30 words, STORY 55-60, ACTING 50-55, CTA 20-25. TOTAL 165-170.
-RULES: Pure Bengali, no English. Say "মুভিমুন ডট অনলাইন" not "মুভিমুন অনলাইন ডট কম". In outro MUST say "পুরো সিনেমাটি দেখতে ভিজিট করুন মুভিমুন ডট অনলাইন".
+RULES: Pure Bengali, no English. Say "মুভিমুন ডট অনলাইন" not "মুভিমুন অনলাইন ডট কম". 
+In outro MUST say "পুরো সিনেমাটি দেখতে ভিজিট করুন মুভিমুন ডট অনলাইন".
 OUTPUT ONLY JSON: {{"voiceover": "165-170 words...", "bangla_title": "title", "caption": "...", "word_count": 168}}"""
 
     models = ["gemini-3.5-flash-lite", "gemini-3.5-flash"]
