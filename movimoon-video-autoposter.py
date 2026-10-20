@@ -2,7 +2,7 @@ import os, requests, random, re, time, asyncio, json, subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
 
-print("=== MoviMoon Bot - FINAL V24 | 165-170 WORDS + TRAILER ONLY + ZOOM 65% + DOT ONLINE ===")
+print("=== MoviMoon Bot - FINAL V27 STABLE | V17 DOWNLOAD FIX + 165-170 WORDS + ZOOM 65% + TRAILER ONLY + TEXT FIX ===")
 
 try:
     import edge_tts
@@ -165,30 +165,40 @@ def get_video_duration(video_path):
         return 0
 
 def download_via_ytdlp_fixed(youtube_url, output="trailer.mp4"):
-    print(f"YT-DLP START {youtube_url}")
+    print(f"YT-DLP START HD 1080p HD 1080p {youtube_url}")
     Path(output).unlink(missing_ok=True)
     cookie_arg = ""
     if Path("cookies.txt").exists() and Path("cookies.txt").stat().st_size > 100:
         cookie_arg = "--cookies cookies.txt"
-        print("Using cookies.txt")
+        print(f"Using cookies.txt ({Path('cookies.txt').stat().st_size} bytes)")
+    else:
+        print("No cookies.txt, trying without")
+    # HD 1080p - Try highest quality first, fallback to lower
     strategies = [
-        f'yt-dlp {cookie_arg} -f "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best[height<=1080]" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --force-ipv4 --no-warnings -q --retries 2 --fragment-retries 2',
-        f'yt-dlp {cookie_arg} -f "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --force-ipv4 --no-warnings -q --retries 2 --fragment-retries 2',
-        f'yt-dlp {cookie_arg} --extractor-args "youtube:player_client=android" -f "best[height<=1080]/best[height<=720]/best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --force-ipv4 --no-warnings -q --retries 2',
-        f'yt-dlp {cookie_arg} -f "worstvideo[height>=480]+worstaudio/worst" -o "{output}" "{youtube_url}" --no-playlist --force-ipv4 --no-warnings -q --retries 1',
+        f'yt-dlp {cookie_arg} -f "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best[height<=1080]" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings -q --retries 1 --fragment-retries 1',
+        f'yt-dlp {cookie_arg} -f "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings -q --retries 1 --fragment-retries 1',
+        f'yt-dlp {cookie_arg} --extractor-args "youtube:player_client=android" -f "best[height<=1080]/best[height<=720]/best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings -q --retries 1',
+        f'yt-dlp {cookie_arg} -f "best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings -q --retries 1',
     ]
     for i, cmd in enumerate(strategies, 1):
         try:
-            print(f"Trying strategy {i}...")
+            print(f"Trying HD strategy {i}...")
             result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=60)
-            if Path(output).exists() and Path(output).stat().st_size > 30000:
+            if Path(output).exists() and Path(output).stat().st_size > 50000:
                 size_mb = Path(output).stat().st_size/1024/1024
-                print(f"YT-DLP SUCCESS {i} - {size_mb:.2f} MB")
+                # Check actual height
+                try:
+                    probe = subprocess.run(f'ffprobe -v error -select_streams v:0 -show_entries stream=height -of default=noprint_wrappers=1:nokey=1 "{output}"', shell=True, capture_output=True, text=True, timeout=10)
+                    h = probe.stdout.strip()
+                    print(f"YT-DLP SUCCESS {i} - {size_mb:.2f} MB - Height: {h}p HD")
+                except:
+                    print(f"YT-DLP SUCCESS {i} - {size_mb:.2f} MB HD")
                 return output
-            print(f"Strategy {i} failed")
+            else:
+                print(f"Strategy {i} failed - stdout:{result.stdout[-200:]} stderr:{result.stderr[-200:]}")
             Path(output).unlink(missing_ok=True)
         except subprocess.TimeoutExpired:
-            print(f"Strategy {i} TIMEOUT")
+            print(f"Strategy {i} TIMEOUT after 60s")
             Path(output).unlink(missing_ok=True)
             continue
         except Exception as e:
@@ -197,8 +207,10 @@ def download_via_ytdlp_fixed(youtube_url, output="trailer.mp4"):
     print("ALL YT-DLP FAILED")
     return None
 
+
 def download_trailer(youtube_url, output="trailer.mp4"):
     return download_via_ytdlp_fixed(youtube_url, output)
+
 
 def download_movie_poster(movie, output="poster.jpg"):
     try:
@@ -653,7 +665,7 @@ def upload_video_to_facebook(page_id, token, video_path, caption, label):
         return None
 
 async def main():
-    print("=== MoviMoon AutoPoster V24 START ===")
+    print("=== MoviMoon AutoPoster V27 HD 1080p START ===")
     history = load_history()
     movies = get_trending_mixed()
     if not movies:
@@ -732,7 +744,7 @@ async def main():
             print(f"Error processing movie {movie.get('id')}: {e}")
             import traceback; traceback.print_exc()
             continue
-    print("=== MoviMoon AutoPoster V24 END ===")
+    print("=== MoviMoon AutoPoster V27 HD END ===")
 
 if __name__ == "__main__":
     asyncio.run(main())
