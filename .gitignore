@@ -1,7 +1,13 @@
+# Temp video/audio files
 trailer.mp4
+trailer_60s.mp4
 voice.mp3
 final.mp4
-*.mp4
-*.mp3
+bgm.mp3
+poster.jpg
+seg_*.mp4
+concat.txt
+cookies.txt
 __pycache__/
 .env
+!posted_history.json
