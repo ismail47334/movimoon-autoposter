@@ -2,7 +2,7 @@ import os, requests, random, re, time, asyncio, json, subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
 
-print("=== MoviMoon Bot - FINAL V31 HD 1080p | DYNAMIC WORDS FIX + COOKIES FIX + VOICE GUARANTEE ===")
+print("=== MoviMoon Bot - FINAL V33 HD 1080p | DYNAMIC WORDS + 2-LINE TITLE + FB + YT SHORTS ===")
 
 try:
     import edge_tts
@@ -169,106 +169,57 @@ def get_video_duration(video_path):
     except:
         return 0
 
+
+
 def download_via_ytdlp_fixed(youtube_url, output="trailer.mp4"):
     print(f"YT-DLP START HD 1080p {youtube_url}")
     Path(output).unlink(missing_ok=True)
     cookie_arg = ""
-    use_cookies = False
     if Path("cookies.txt").exists() and Path("cookies.txt").stat().st_size > 100:
-        try:
-            with open("cookies.txt", "r", encoding="utf-8", errors="ignore") as cf:
-                first = cf.read(500)
-                if "Netscape" in first or "# HTTP" in first or "youtube.com" in first.lower():
-                    cookie_arg = "--cookies cookies.txt"
-                    use_cookies = True
-                    print(f"Using cookies.txt ({Path('cookies.txt').stat().st_size} bytes) - OK")
-                else:
-                    print(f"cookies.txt not Netscape format (size {Path('cookies.txt').stat().st_size}), skipping cookies to avoid error")
-                    cookie_arg = ""
-                    use_cookies = False
-        except Exception as ce:
-            print(f"Cookies check error {ce}, trying without")
-            cookie_arg = ""
-            use_cookies = False
+        cookie_arg = "--cookies cookies.txt"
+        print(f"Using cookies.txt ({Path('cookies.txt').stat().st_size} bytes)")
     else:
         print("No cookies.txt, trying without")
-        use_cookies = False
-    # HD 1080p - Try highest quality first, fallback to lower - V31 FIX: retry without cookies if cookies error
-    base_strategies = [
-        '-f "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best[height<=1080]" --merge-output-format mp4',
-        '-f "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best" --merge-output-format mp4',
-        '--extractor-args "youtube:player_client=android" -f "best[height<=1080]/best[height<=720]/best" --merge-output-format mp4',
-        '-f "best" --merge-output-format mp4',
+    # V28 EXACT - HD 1080p - Try highest quality first, fallback to lower
+    strategies = [
+        f'yt-dlp {cookie_arg} -f "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best[height<=1080]" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings -q --retries 1 --fragment-retries 1',
+        f'yt-dlp {cookie_arg} -f "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings -q --retries 1 --fragment-retries 1',
+        f'yt-dlp {cookie_arg} --extractor-args "youtube:player_client=android" -f "best[height<=1080]/best[height<=720]/best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings -q --retries 1',
+        f'yt-dlp {cookie_arg} -f "best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings -q --retries 1',
     ]
-    
-    def run_strategies(with_cookies):
-        c_arg = cookie_arg if with_cookies else ""
-        for i, base in enumerate(base_strategies, 1):
-            cmd = f'yt-dlp {c_arg} {base} -o "{output}" "{youtube_url}" --no-playlist --no-warnings -q --retries 2 --fragment-retries 2'
-            try:
-                print(f"Trying HD strategy {i} {'with cookies' if with_cookies else 'without cookies'}...")
-                result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=90)
-                if Path(output).exists() and Path(output).stat().st_size > 50000:
-                    size_mb = Path(output).stat().st_size/1024/1024
-                    try:
-                        probe = subprocess.run(f'ffprobe -v error -select_streams v:0 -show_entries stream=height -of default=noprint_wrappers=1:nokey=1 "{output}"', shell=True, capture_output=True, text=True, timeout=10)
-                        h = probe.stdout.strip()
-                        print(f"YT-DLP SUCCESS {i} {'with cookies' if with_cookies else 'no cookies'} - {size_mb:.2f} MB - Height: {h}p HD")
-                    except:
-                        print(f"YT-DLP SUCCESS {i} - {size_mb:.2f} MB HD")
-                    return output
-                else:
-                    err_text = (result.stderr or "") + (result.stdout or "")
-                    # Check if cookies error - if yes, we should try without cookies immediately
-                    if "do-i-pass-cookies-to-yt-dlp" in err_text or "cookie" in err_text.lower() and with_cookies:
-                        print(f"Strategy {i} cookies error detected, will retry without cookies: {err_text[-200:]}")
-                    else:
-                        print(f"Strategy {i} failed - {err_text[-300:]}")
-                Path(output).unlink(missing_ok=True)
-            except subprocess.TimeoutExpired:
-                print(f"Strategy {i} TIMEOUT after 90s")
-                Path(output).unlink(missing_ok=True)
-                continue
-            except Exception as e:
-                print(f"Strategy {i} err {e}")
-                continue
-        return None
-
-    # First try with cookies if available
-    if use_cookies:
-        result = run_strategies(with_cookies=True)
-        if result:
-            return result
-        print("All strategies with cookies failed, retrying WITHOUT cookies - V31 FIX")
-    
-    # Retry without cookies
-    result = run_strategies(with_cookies=False)
-    if result:
-        return result
-        
-    print("ALL YT-DLP FAILED (with and without cookies)")
+    for i, cmd in enumerate(strategies, 1):
+        try:
+            print(f"Trying HD strategy {i}...")
+            result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=60)
+            if Path(output).exists() and Path(output).stat().st_size > 50000:
+                size_mb = Path(output).stat().st_size/1024/1024
+                try:
+                    probe = subprocess.run(f'ffprobe -v error -select_streams v:0 -show_entries stream=height -of default=noprint_wrappers=1:nokey=1 "{output}"', shell=True, capture_output=True, text=True, timeout=10)
+                    h = probe.stdout.strip()
+                    print(f"YT-DLP SUCCESS {i} - {size_mb:.2f} MB - Height: {h}p HD")
+                except:
+                    print(f"YT-DLP SUCCESS {i} - {size_mb:.2f} MB HD")
+                return output
+            else:
+                print(f"Strategy {i} failed - stdout:{result.stdout[-200:]} stderr:{result.stderr[-200:]}")
+            Path(output).unlink(missing_ok=True)
+        except subprocess.TimeoutExpired:
+            print(f"Strategy {i} TIMEOUT after 60s")
+            Path(output).unlink(missing_ok=True)
+            continue
+        except Exception as e:
+            print(f"Strategy {i} err {e}")
+            continue
+    print("ALL YT-DLP FAILED")
     return None
-
 
 def download_trailer(youtube_url, output="trailer.mp4"):
     return download_via_ytdlp_fixed(youtube_url, output)
 
 
-def download_movie_poster(movie, output="poster.jpg"):
-    try:
-        poster_path = movie.get("poster_path")
-        if not poster_path:
-            return None
-        url = f"https://image.tmdb.org/t/p/w1280{poster_path}"
-        r = requests.get(url, timeout=20)
-        if r.status_code == 200:
-            with open(output, 'wb') as f:
-                f.write(r.content)
-            if Path(output).exists() and Path(output).stat().st_size > 1000:
-                return output
-    except Exception as e:
-        print(f"Poster err {e}")
-    return None
+
+
+
 
 def get_genre_names(genre_ids, english=False):
     genre_map_en = {
@@ -401,14 +352,34 @@ def call_groq_fallback(movie_title, year, m_type, rating, overview, link, genre_
         if target_words is None:
             target_words = 160
         target_min = max(70, target_words - 5)
-        prompt = f"You are Bengali Voiceover Director for MoviMoon. Write EXACTLY {target_min}-{target_words} Bengali words for {trailer_duration:.0f}s video about {title} ({year}) Genre {genre_str} Plot {overview}. Pure Bengali. Output JSON."
-        groq_models = ["llama-3.3-70b-versatile", "llama-3.3-70b-specdec", "meta-llama/llama-4-maverick-17b-128e-instruct", "llama3-70b-8192"]
+        prompt = f"""You are Bengali Voiceover Director for MoviMoon.
+Write EXACTLY {target_min}-{target_words} Bengali words for {trailer_duration:.0f}s video about {title} ({year}) Genre {genre_str} Plot {overview}.
+Structure: Hook + Story + Acting + CTA.
+Total {target_min}-{target_words} words. Pure Bengali.
+Say "movimoon dot online" at end.
+Output JSON only: {{"voiceover":"...","bangla_title":"...","caption":"...","word_count":...}}"""
+        # V32 NEW GROQ MODELS - 2026 updated list, old llama3-70b decommissioned
+        groq_models = [
+            "openai/gpt-oss-20b",
+            "openai/gpt-oss-120b",
+            "llama-3.1-8b-instant",
+            "meta-llama/llama-4-scout-17b-16e-instruct",
+            "qwen/qwen3-32b",
+            "llama-3.3-70b-versatile",
+            "llama-3.3-70b-specdec"
+        ]
         completion = None
         last_err = None
         for gmodel in groq_models:
             try:
                 print(f"Trying Groq model {gmodel}...")
-                completion = client.chat.completions.create(model=gmodel, messages=[{"role": "user", "content": prompt}], temperature=0.8, max_tokens=3000, response_format={"type": "json_object"})
+                completion = client.chat.completions.create(
+                    model=gmodel, 
+                    messages=[{"role": "user", "content": prompt}], 
+                    temperature=0.8, 
+                    max_tokens=3000,
+                    response_format={"type": "json_object"}
+                )
                 print(f"Groq model {gmodel} success")
                 break
             except Exception as ge:
@@ -425,9 +396,6 @@ def call_groq_fallback(movie_title, year, m_type, rating, overview, link, genre_
         if wc > target_words:
             voice = " ".join(voice.split()[:target_words])
             wc = target_words
-        if wc < target_min - 15:
-            print(f"Groq gave only {wc} words < {target_min}, will need fallback")
-            return None, None, None
         print(f"Groq SUCCESS - {wc} words")
         if not story_bn:
             story_bn = f"{overview[:100]} এক অসাধারণ গল্প!"
@@ -438,26 +406,40 @@ def call_groq_fallback(movie_title, year, m_type, rating, overview, link, genre_
         return None, None, None
 
 
+
 def call_gemini_video_script(title, year, m_type, rating, overview, link, movie=None, target_words=160, trailer_duration=60):
+    # V33 - V28 EXACT LOGIC but ONLY gemini-3.5-flash-lite + loop + dynamic words
     genre_str = get_genre_names(movie.get("genre_ids", []) if movie else [], english=True)
     title_raw = title
     if not GEMINI_API_KEY and not GROQ_API_KEY:
         story_bn = "এক অসাধারণ রহস্যময় গল্পের জগত!"
-        voice = f"বন্ধুরা আজকে কথা বলবো {year} সালের সিনেমা {title_raw} নিয়ে। এই সিনেমাটি {genre_str} ঘরানার একটি অসাধারণ গল্প। {overview[:100]}। অভিনয়, পরিচালনা এবং গল্প সবকিছুই অসাধারণ। শেষের টুইস্টটা একেবারে অপ্রত্যাশিত। এই সিনেমাটি অবশ্যই দেখার মতো। পুরো সিনেমাটি দেখতে ভিজিট করুন মুভিমুন ডট অনলাইন।"
+        voice = f"বন্ধুরা আজকে কথা বলবো {year} সালের সিনেমা {title_raw} নিয়ে।"
         return voice, story_bn, title_raw
 
-    if trailer_duration < 10:
+    # Dynamic words support (V30 feature) but target is from trailer duration
+    if trailer_duration < 5:
         trailer_duration = 60
     if target_words is None or target_words == 0:
         target_words = int(trailer_duration * 2.66)
-        target_words = max(75, min(160, target_words))
+        target_words = max(75, min(170, target_words))
     
     target_min = max(70, target_words - 5)
     target_max = target_words
-    
-    models = ["gemini-3.5-flash-lite", "gemini-3.5-flash"]
+    # For 40s video like log: 40*2.66=106 words
 
-    def smart_expand_to_limit(current_voice, current_wc, target_min=155, target_max=160):
+    # V28 style prompt - but dynamic
+    prompt = f"""You are the Senior Bengali Voiceover Director for MoviMoon.
+CRITICAL WORD COUNT: EXACTLY {target_min}-{target_max} Bengali words. Max {target_max}, never over {target_max}. For {trailer_duration:.0f} seconds.
+
+INPUT: Movie Title: {title} Year: {year} Rating: {rating}/10 Genre: {genre_str} Plot: {overview} Link: {link}
+STRUCTURE: HOOK 28-30 words, STORY 55-60, ACTING 50-55, CTA 20-25. TOTAL {target_min}-{target_max}.
+RULES: Pure Bengali, no English. Say "মুভিমুন ডট অনলাইন" not "মুভিমুন অনলাইন ডট কম". In outro MUST say "পুরো সিনেমাটি দেখতে ভিজিট করুন মুভিমুন ডট অনলাইন".
+OUTPUT ONLY JSON: {{"voiceover": "{target_min}-{target_max} words...", "bangla_title": "title", "caption": "...", "word_count": {target_min}}}"""
+
+    # ONLY gemini-3.5-flash-lite as user requested - this one works and returns
+    models = ["gemini-3.5-flash-lite"]
+
+    def smart_expand_to_limit(current_voice, current_wc, target_min=165, target_max=170):
         expansions = [
             "প্রতিটি দৃশ্য অসাধারণভাবে সাজানো হয়েছে।",
             "পরিচালকের মুন্সিয়ানা মুগ্ধ করবে।",
@@ -468,17 +450,13 @@ def call_gemini_video_script(title, year, m_type, rating, overview, link, movie=
             "গল্পটা মন ছুঁয়ে যাবে।",
             "দেখতে ভুলবেন না।",
             "এই সিনেমাটি অবশ্যই দেখার মতো।",
-            "আবেগ এবং রহস্যে ভরপুর।",
-            "ব্যাকগ্রাউন্ড মিউজিক অসাধারণ।",
-            "ডায়লগগুলো মনে গেঁথে থাকবে।",
-            "ক্লাইম্যাক্সটা দুর্দান্ত।",
-            "পরিবারের সাথে উপভোগ করার মতো।"
+            "আবেগ এবং রহস্যে ভরপুর।"
         ]
         result = current_voice
         cw = current_wc
         idx = 0
-        while cw < target_min and idx < len(expansions)*2:
-            add = expansions[idx % len(expansions)]
+        while cw < target_min and idx < len(expansions):
+            add = expansions[idx]
             new_wc = len((result + " " + add).split())
             if new_wc > target_max:
                 idx += 1
@@ -492,29 +470,11 @@ def call_gemini_video_script(title, year, m_type, rating, overview, link, movie=
             cw = target_max
         return result, cw
 
-    def build_local_fallback_voice(target_words, title, year, genre_str, overview):
-        # V31 FIX: Guaranteed local fallback if API fails - ensures voice length
-        base = f"বন্ধুরা আজকে কথা বলবো {year} সালের অসাধারণ {genre_str} সিনেমা {title} নিয়ে। "
-        story = f"{overview[:200]} "
-        middle = "এই সিনেমার প্রতিটি দৃশ্য অসাধারণভাবে সাজানো হয়েছে। পরিচালকের মুন্সিয়ানা মুগ্ধ করবে। অভিনেতাদের দুর্দান্ত অভিনয়, সিনেমাটোগ্রাফি এবং আবহ সঙ্গীত প্রাণবন্ত। প্রতিটি মুহূর্তে টানটান উত্তেজনা রয়েছে। গল্পটা মন ছুঁয়ে যাবে। শেষের টুইস্টটা একেবারে অপ্রত্যাশিত। "
-        end = "এই সিনেমাটি অবশ্যই দেখার মতো। পুরো সিনেমাটি দেখতে ভিজিট করুন মুভিমুন ডট অনলাইন।"
-        full = base + story + middle*2 + end
-        words = full.split()
-        if len(words) > target_words:
-            full = " ".join(words[:target_words])
-        elif len(words) < target_words - 10:
-            # Repeat middle to reach target
-            while len(full.split()) < target_words - 5:
-                full += " " + middle
-            full = " ".join(full.split()[:target_words])
-        return full
-
     for model in models:
         try:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
-            prompt_text = f"You are Bengali Voiceover Director for MoviMoon. Write EXACTLY {target_min}-{target_max} Bengali words for {trailer_duration:.0f}s video about {title} ({year}) Genre {genre_str} Plot {overview}. Structure Hook Story Acting CTA. Total {target_min}-{target_max} words. Pure Bengali. Output JSON with voiceover, bangla_title, caption, word_count."
-            data = {"contents":[{"parts":[{"text":prompt_text}]}], "generationConfig":{"temperature":0.8, "topP":0.9, "maxOutputTokens": 4096, "response_mime_type": "application/json"}}
-            res = requests.post(url, json=data, timeout=45)
+            data = {"contents":[{"parts":[{"text":prompt}]}], "generationConfig":{"temperature":0.7, "topP":0.9, "maxOutputTokens": 4096, "response_mime_type": "application/json"}}
+            res = requests.post(url, json=data, timeout=30)
             if res.status_code == 200:
                 js = res.json()
                 try:
@@ -523,61 +483,42 @@ def call_gemini_video_script(title, year, m_type, rating, overview, link, movie=
                     print(f"{model} no text")
                     continue
                 clean_text = text.replace("```json","").replace("```","").strip()
-                clean_text = clean_text.encode('utf-8', errors='ignore').decode('utf-8')
                 m = re.search(r'\{.*\}', clean_text, re.DOTALL)
                 if m:
-                    try:
-                        j = json.loads(m.group(), strict=False)
-                    except:
-                        fixed = re.sub(r'\\u(?![0-9a-fA-F]{4})', '', m.group())
-                        try:
-                            j = json.loads(fixed, strict=False)
-                        except:
-                            print(f"{model} JSON parse failed, trying next")
-                            continue
+                    j = json.loads(m.group())
                     voice = j.get("voiceover","").strip()
                     story_bn = j.get("caption","").strip() or j.get("story_bn","").strip()
                     wc = len(voice.split())
                     print(f"Gemini {model} OK - {wc} words (target {target_min}-{target_max} for {trailer_duration:.0f}s) story: {story_bn[:60]}")
-                    if wc == 0:
-                        print(f"Gemini {model} gave 0 words, skipping")
-                        continue
                     if wc < target_min:
                         current_voice = voice
                         current_wc = wc
                         loop_attempt = 1
-                        max_loops = 2
+                        max_loops = 3
                         while current_wc < target_min and loop_attempt <= max_loops:
-                            print(f"Loop {loop_attempt}: Gemini gave only {current_wc} words, asking to expand to {target_min}-{target_max}")
+                            print(f"Loop {loop_attempt}: Gemini gave only {current_wc} words, asking to expand previous to {target_min}-{target_max} - using {model}")
                             try:
-                                expand_text = f"Expand previous {current_wc} words to {target_min}-{target_max} words Bengali. Previous: {current_voice}. Output JSON."
-                                data_loop = {"contents":[{"parts":[{"text":expand_text}]}], "generationConfig":{"temperature":0.8, "topP":0.9, "maxOutputTokens": 4096, "response_mime_type": "application/json"}}
-                                res_loop = requests.post(url, json=data_loop, timeout=45)
+                                expand_prompt = f"""You gave only {current_wc} words, need {target_min}-{target_max}. Your previous text: {current_voice}
+TASK: Expand to EXACTLY {target_min}-{target_max} Bengali words. Keep all content, add acting/direction/music. Current {current_wc} -> need {target_min}-{target_max}.
+MUST say "মুভিমুন ডট অনলাইন" not "মুভিমুন অনলাইন ডট কম".
+OUTPUT ONLY JSON: {{"voiceover": "{target_min}-{target_max} words...", "bangla_title": "title", "caption": "...", "word_count": {target_min}}}"""
+                                data_loop = {"contents":[{"parts":[{"text":expand_prompt}]}], "generationConfig":{"temperature":0.7, "topP":0.9, "maxOutputTokens": 4096, "response_mime_type": "application/json"}}
+                                res_loop = requests.post(url, json=data_loop, timeout=30)
                                 if res_loop.status_code == 200:
                                     js_loop = res_loop.json()
-                                    try:
-                                        text_loop = js_loop["candidates"][0]["content"]["parts"][0]["text"]
-                                    except:
-                                        loop_attempt += 1
-                                        continue
+                                    text_loop = js_loop["candidates"][0]["content"]["parts"][0]["text"]
                                     clean_loop = text_loop.replace("```json","").replace("```","").strip()
                                     m_loop = re.search(r'\{.*\}', clean_loop, re.DOTALL)
                                     if m_loop:
-                                        try:
-                                            j_loop = json.loads(m_loop.group(), strict=False)
-                                        except:
-                                            loop_attempt += 1
-                                            continue
+                                        j_loop = json.loads(m_loop.group())
                                         voice_loop = j_loop.get("voiceover","").strip()
                                         wc_loop = len(voice_loop.split())
-                                        if wc_loop == 0:
-                                            print(f"Loop {loop_attempt} gave 0 words, skipping")
-                                            loop_attempt += 1
-                                            continue
-                                        print(f"Loop {loop_attempt} result: {current_wc} -> {wc_loop} words")
+                                        print(f"Loop {loop_attempt} result: {current_wc} -> {wc_loop} words - using {model}")
                                         if wc_loop >= target_min and wc_loop <= target_max:
+                                            print(f"Loop {loop_attempt} SUCCESS: {wc_loop} words")
                                             return voice_loop, story_bn, j_loop.get("bangla_title", title_raw)
                                         if wc_loop > target_max:
+                                            print(f"Loop {loop_attempt} too long {wc_loop} -> trimming to {target_max}")
                                             voice_loop = " ".join(voice_loop.split()[:target_max])
                                             return voice_loop, story_bn, j_loop.get("bangla_title", title_raw)
                                         current_voice = voice_loop
@@ -586,52 +527,51 @@ def call_gemini_video_script(title, year, m_type, rating, overview, link, movie=
                                     else:
                                         loop_attempt += 1
                                 else:
-                                    print(f"Loop {loop_attempt} HTTP {res_loop.status_code}")
+                                    print(f"Loop {loop_attempt} fail {res_loop.status_code}")
                                     loop_attempt += 1
                             except Exception as e:
                                 print(f"Loop {loop_attempt} error: {e}")
                                 loop_attempt += 1
                         if current_wc < target_min:
-                            print(f"After {max_loops} loops still {current_wc} words, using smart expand fallback")
+                            print(f"After {max_loops} loops still {current_wc} words, fallback for remaining (cap {target_max})")
                             voice, wc = smart_expand_to_limit(current_voice, current_wc, target_min, target_max)
-                            if wc < target_min:
-                                print(f"Smart expand still {wc} words, using local guaranteed fallback")
-                                voice = build_local_fallback_voice(target_max, title_raw, year, genre_str, overview)
-                                wc = len(voice.split())
+                            print(f"After fallback: {wc} words")
                         else:
                             voice = current_voice
                             wc = current_wc
                     if wc > target_max:
+                        print(f"Final trim {wc} -> {target_max}")
                         voice = " ".join(voice.split()[:target_max])
+                        wc = target_max
                     if not story_bn:
-                        story_bn = f"{overview[:120]} এক অসাধারণ গল্প!"
-                    # V31 FIX: Ensure at least target_min words, if not, use local fallback
-                    final_wc = len(voice.split())
-                    if final_wc < target_min - 10:
-                        print(f"Final voice only {final_wc} words < {target_min}, using local guaranteed fallback")
-                        voice = build_local_fallback_voice(target_max, title_raw, year, genre_str, overview)
+                        story_bn = f"{overview[:120]} এক অসাধারণ গল্পের জগত!"
                     return voice, story_bn, j.get("bangla_title", title_raw)
+                else:
+                    print(f"{model} no JSON")
             else:
                 print(f"Gemini {model} fail {res.status_code} {res.text[:200]}")
         except Exception as e:
             print(f"Gemini {model} err {e}")
             import traceback; traceback.print_exc()
             continue
-
     print("All Gemini models failed, trying Groq fallback...")
-    try:
-        groq_voice, groq_story, groq_title = call_groq_fallback(title_raw, year, m_type, rating, overview, link, genre_str, target_words, trailer_duration)
-        if groq_voice and len(groq_voice.split()) >= target_min - 10:
-            print(f"Groq fallback success {len(groq_voice.split())} words")
-            return groq_voice, groq_story, groq_title
-    except Exception as ge:
-        print(f"Groq fallback error {ge}")
+    groq_voice, groq_story, groq_title = call_groq_fallback(title_raw, year, m_type, rating, overview, link, genre_str, target_words, trailer_duration)
+    if groq_voice:
+        return groq_voice, groq_story, groq_title
+    # Ultimate fallback
+    story_bn = "এক অসাধারণ রহস্যময় গল্পের জগত!"
+    # Build guaranteed voice for target
+    base = f"বন্ধুরা আজকে কথা বলবো {year} সালের অসাধারণ {genre_str} সিনেমা {title_raw} নিয়ে। {overview[:200]} "
+    middle = "এই সিনেমার প্রতিটি দৃশ্য অসাধারণভাবে সাজানো হয়েছে। পরিচালকের মুন্সিয়ানা মুগ্ধ করবে। অভিনেতাদের দুর্দান্ত অভিনয়, সিনেমাটোগ্রাফি এবং আবহ সঙ্গীত প্রাণবন্ত। প্রতিটি মুহূর্তে টানটান উত্তেজনা রয়েছে। গল্পটা মন ছুঁয়ে যাবে। শেষের টুইস্টটা একেবারে অপ্রত্যাশিত। "
+    end = "এই সিনেমাটি অবশ্যই দেখার মতো। পুরো সিনেমাটি দেখতে ভিজিট করুন মুভিমুন ডট অনলাইন।"
+    full = base + middle*2 + end
+    words = full.split()
+    if len(words) > target_max:
+        full = " ".join(words[:target_max])
+    return full, story_bn, title_raw
 
-    # V31 FIX: Ultimate local guaranteed fallback - never return short voice
-    print(f"All APIs failed, using LOCAL GUARANTEED FALLBACK for {target_max} words")
-    story_bn = f"{overview[:150]} এক অসাধারণ গল্পের জগত!"
-    voice = build_local_fallback_voice(target_max, title_raw, year, genre_str, overview)
-    return voice, story_bn, title_raw
+
+
 
 
 def build_caption(title, year, m_type, genre_str, rating, story_bn, link):
@@ -644,7 +584,7 @@ def build_caption(title, year, m_type, genre_str, rating, story_bn, link):
     return caption
 
 async def generate_tts_voice(text, output_path="voice.mp3"):
-    print(f"TTS: {len(text.split())} words RATE +28% PRO STUDIO V28 HD 1080p")
+    print(f"TTS: {len(text.split())} words RATE +28% PRO STUDIO V33 HD 1080p")
     communicate = edge_tts.Communicate(text, VOICE, rate=RATE, pitch=PITCH, volume=VOLUME)
     await communicate.save(output_path)
     try:
@@ -694,7 +634,7 @@ def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp
             font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
             if not Path(font_path).exists():
                 font_path = "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
-        print(f"Creating {dur}s video FINAL V31 HD 1080p ZOOM 65% - Top: {label_top_safe} | {safe_title} | Type: {m_type}")
+        print(f"Creating {dur}s video FINAL V33 HD 1080p ZOOM 65% - Top: {label_top_safe} | {safe_title} | Type: {m_type}")
         if poster_path and Path(poster_path).exists():
             cmd = (
                 f"ffmpeg -y -loop 1 -t {dur} -i \"{poster_path}\" "
@@ -710,7 +650,7 @@ def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp
                 f"x=(w-text_w)/2:y=h-200-3*sin(t*2.2):shadowcolor=black:shadowx=2:shadowy=2:fontfile={font_path}[base2];"
                 f"[base2]drawtext=text='movimoon.online':fontcolor=yellow:fontsize=52:box=1:boxcolor=black@0.75:boxborderw=14:borderw=3:bordercolor=black:"
                 f"x=(w-text_w)/2:y=h-150-4*sin(t*2.2):shadowcolor=black:shadowx=3:shadowy=3:fontfile={font_path}[final_v];"
-                f"[1:a]volume=0.25[trailer_low];[3:a]volume=0.40[bg_vol];[2:a]asplit=2[voice_sc][voice_mix];"
+                f"[1:a]volume=0.30[trailer_low];[3:a]volume=0.40[bg_vol];[2:a]asplit=2[voice_sc][voice_mix];"
                 f"[bg_vol][voice_sc]sidechaincompress=threshold=0.015:ratio=8:attack=20:release=400:makeup=1[ducked];"
                 f"[trailer_low][ducked][voice_mix]amix=inputs=3:duration=longest:dropout_transition=0:weights=0.30 0.35 1,volume=1.25,loudnorm=I=-16:TP=-1.5:LRA=8[a]\" "
                 f"-map \"[final_v]\" -map \"[a]\" -c:v libx264 -profile:v high -level:v 4.2 -preset slow -crf 16 -pix_fmt yuv420p -r 30 -movflags +faststart -c:a aac -b:a 192k -t {dur} \"{output}\""
@@ -729,12 +669,12 @@ def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp
                 f"x=(w-text_w)/2:y=h-200-3*sin(t*2.2):shadowcolor=black:shadowx=2:shadowy=2:fontfile={font_path}[base2];"
                 f"[base2]drawtext=text='movimoon.online':fontcolor=yellow:fontsize=52:box=1:boxcolor=black@0.75:boxborderw=14:borderw=3:bordercolor=black:"
                 f"x=(w-text_w)/2:y=h-150-4*sin(t*2.2):shadowcolor=black:shadowx=3:shadowy=3:fontfile={font_path}[final_v];"
-                f"[0:a]volume=0.25[trailer_low];[2:a]volume=0.40[bg_vol];[1:a]asplit=2[voice_sc][voice_mix];"
+                f"[0:a]volume=0.30[trailer_low];[2:a]volume=0.40[bg_vol];[1:a]asplit=2[voice_sc][voice_mix];"
                 f"[bg_vol][voice_sc]sidechaincompress=threshold=0.015:ratio=8:attack=20:release=400:makeup=1[ducked];"
                 f"[trailer_low][ducked][voice_mix]amix=inputs=3:duration=longest:dropout_transition=0:weights=0.30 0.35 1,volume=1.25,loudnorm=I=-16:TP=-1.5:LRA=8[a]\" "
                 f"-map \"[final_v]\" -map \"[a]\" -c:v libx264 -profile:v high -level:v 4.2 -preset slow -crf 16 -pix_fmt yuv420p -r 30 -movflags +faststart -c:a aac -b:a 192k -t {dur} \"{output}\""
             )
-        print(f"FFmpeg FINAL V31 HD {dur}s...")
+        print(f"FFmpeg FINAL V33 HD {dur}s...")
         result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=240)
         if Path(output).exists() and Path(output).stat().st_size > 50000:
             print(f"Final OK V30 {Path(output).stat().st_size/1024/1024:.2f} MB - ZOOM 65% + 2-LINE TITLE + DYNAMIC WORDS")
@@ -925,7 +865,7 @@ def upload_video_to_facebook(page_id, token, video_path, caption, label):
         return None
 
 async def main():
-    print("=== MoviMoon AutoPoster V29 HD 1080p FB+YT START ===")
+    print("=== MoviMoon AutoPoster V33 HD 1080p FB+YT START ===")
     history = load_history()
     movies = get_trending_mixed()
     if not movies:
@@ -959,15 +899,13 @@ async def main():
                 continue
             poster_file = download_movie_poster(movie, "poster.jpg")
             trailer_dur_raw = get_video_duration(trailer_file)
-            # V31 FIX: For long trailers (like 150s), final video will be trimmed to 60s, so target should be for final duration, not raw
-            # First, estimate final duration after trimming (max 60s)
             estimated_final = min(trailer_dur_raw, 60.0)
             if trailer_dur_raw > 62:
-                estimated_final = 60.0  # Will be smart-trimmed to 60s
+                estimated_final = 60.0
             target_words = int(estimated_final * 2.66)
             target_words = max(75, min(160, target_words))
-            print(f"Trailer duration {trailer_dur_raw:.1f}s -> estimated final {estimated_final:.0f}s -> target {target_words} words (160 for 60s)")
-            voice_text, story_bn, bangla_title = call_gemini_video_script(title, year, m_type, rating, overview, link, movie, target_words=target_words, trailer_duration=estimated_final)
+            print(f"Trailer duration {trailer_dur_raw:.1f}s -> target {target_words} words (160 for 60s, proportional)")
+            voice_text, story_bn, bangla_title = call_gemini_video_script(title, year, m_type, rating, overview, link, movie, target_words=target_words, trailer_duration=trailer_dur_raw)
             wc = len(voice_text.split())
             if wc > target_words:
                 voice_text = " ".join(voice_text.split()[:target_words])
@@ -1049,7 +987,7 @@ async def main():
             print(f"Error processing movie {movie.get('id')}: {e}")
             import traceback; traceback.print_exc()
             continue
-    print("=== MoviMoon AutoPoster V31 END ===")
+    print("=== MoviMoon AutoPoster V33 END ===")
 
 if __name__ == "__main__":
     asyncio.run(main())
