@@ -1,4 +1,4 @@
-name: MoviMoon Video AutoPoster - FINAL V33 HD 1080p - FB + YT SHORTS V28 BASED + GROQ NEW MODELS + DYNAMIC WORDS + 2-LINE TITLE + PAGE ONLY SUCCESS
+name: MoviMoon Video AutoPoster - FINAL V35 2K QHD 2K Q2K QHD 1440p - FB + YT SHORTS V28 BASED + GROQ NEW MODELS + DYNAMIC WORDS + 2-LINE TITLE + PAGE ONLY SUCCESS
 
 on:
   schedule:
@@ -46,7 +46,7 @@ jobs:
           fi
           ls -lh
 
-      - name: Run HD Video Autoposter - FB + YT Shorts
+      - name: Run 2K QHD Video Autoposter - FB + YT Shorts
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
           FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
