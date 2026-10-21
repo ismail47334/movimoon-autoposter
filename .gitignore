@@ -8,7 +8,6 @@ bgm.mp3
 poster.jpg
 seg_*.mp4
 concat.txt
-cookies.txt
 
 # Python cache
 __pycache__/
