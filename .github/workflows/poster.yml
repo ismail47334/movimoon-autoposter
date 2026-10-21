@@ -1,4 +1,4 @@
-name: MoviMoon Video AutoPoster - FINAL V28 HD 1080p - PAGE ONLY SUCCESS FIX + GROUP OPTIONAL
+name: MoviMoon Video AutoPoster - FINAL V29 HD 1080p - FB + YT SHORTS SEO + PAGE ONLY SUCCESS
 
 on:
   schedule:
@@ -20,7 +20,7 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install FFmpeg + Deno + yt-dlp + Fonts
+      - name: Install FFmpeg + Deno + yt-dlp + Fonts + Google APIs
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg fonts-dejavu-core fonts-noto-core
@@ -31,7 +31,7 @@ jobs:
           export PATH="$DENO_INSTALL/bin:$PATH"
           $HOME/.deno/bin/deno --version
           pip install -r requirements.txt
-          pip install -U "yt-dlp[default]" yt-dlp-ejs groq
+          pip install -U "yt-dlp[default]" yt-dlp-ejs groq google-api-python-client google-auth google-auth-oauthlib google-auth-httplib2
           yt-dlp --version
 
       - name: Create cookies.txt
@@ -46,7 +46,7 @@ jobs:
           fi
           ls -lh
 
-      - name: Run HD Video Autoposter
+      - name: Run HD Video Autoposter - FB + YT Shorts
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
           FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
@@ -54,6 +54,10 @@ jobs:
           FB_GROUP_ID: ${{ secrets.FB_GROUP_ID }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+          YOUTUBE_CHANNEL_ID: ${{ secrets.YOUTUBE_CHANNEL_ID }}
         run: |
           export DENO_INSTALL="$HOME/.deno"
           export PATH="$DENO_INSTALL/bin:$PATH"
