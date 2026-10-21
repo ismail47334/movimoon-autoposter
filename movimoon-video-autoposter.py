@@ -2,7 +2,7 @@ import os, requests, random, re, time, asyncio, json, subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
 
-print("=== MoviMoon Bot - FINAL V33 HD 1080p | DYNAMIC WORDS + 2-LINE TITLE + FB + YT SHORTS ===")
+print("=== MoviMoon Bot - FINAL V35 2K QHD 1080p | DYNAMIC WORDS + 2-LINE TITLE + FB + YT SHORTS ===")
 
 try:
     import edge_tts
@@ -171,53 +171,92 @@ def get_video_duration(video_path):
 
 
 
+
+
 def download_via_ytdlp_fixed(youtube_url, output="trailer.mp4"):
-    print(f"YT-DLP START HD 1080p {youtube_url}")
+    print(f"YT-DLP START 2K QHD {youtube_url}")
     Path(output).unlink(missing_ok=True)
     cookie_arg = ""
+    has_cookies = False
     if Path("cookies.txt").exists() and Path("cookies.txt").stat().st_size > 100:
         cookie_arg = "--cookies cookies.txt"
+        has_cookies = True
         print(f"Using cookies.txt ({Path('cookies.txt').stat().st_size} bytes)")
     else:
         print("No cookies.txt, trying without")
-    # V28 EXACT - HD 1080p - Try highest quality first, fallback to lower
-    strategies = [
-        f'yt-dlp {cookie_arg} -f "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best[height<=1080]" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings -q --retries 1 --fragment-retries 1',
-        f'yt-dlp {cookie_arg} -f "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings -q --retries 1 --fragment-retries 1',
-        f'yt-dlp {cookie_arg} --extractor-args "youtube:player_client=android" -f "best[height<=1080]/best[height<=720]/best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings -q --retries 1',
-        f'yt-dlp {cookie_arg} -f "best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings -q --retries 1',
+    # V35 - 2K MAX - Try highest quality first: 2160p(4K) -> 1440p(2K) -> 1080p -> 720p -> best
+    base_strategies = [
+        # 2160p 4K first (if available, max quality)
+        f'-f "bestvideo[height<=2160][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=2160]+bestaudio/best[height<=2160][ext=mp4]/best[height<=2160]" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings -q --retries 1 --fragment-retries 1',
+        # 1440p 2K QHD - main target as user asked 2K
+        f'-f "bestvideo[height<=1440][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=1440]+bestaudio/best[height<=1440][ext=mp4]/best[height<=1440]" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings -q --retries 1 --fragment-retries 1',
+        # 1080p FHD fallback
+        f'-f "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best[height<=1080]" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings -q --retries 1 --fragment-retries 1',
+        # 720p HD fallback
+        f'-f "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings -q --retries 1 --fragment-retries 1',
+        # Android client - often gets higher quality
+        f'--extractor-args "youtube:player_client=android" -f "best[height<=2160]/best[height<=1440]/best[height<=1080]/best[height<=720]/best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings -q --retries 1',
+        # Ultimate fallback
+        f'-f "best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings -q --retries 1',
     ]
-    for i, cmd in enumerate(strategies, 1):
-        try:
-            print(f"Trying HD strategy {i}...")
-            result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=60)
-            if Path(output).exists() and Path(output).stat().st_size > 50000:
-                size_mb = Path(output).stat().st_size/1024/1024
-                try:
-                    probe = subprocess.run(f'ffprobe -v error -select_streams v:0 -show_entries stream=height -of default=noprint_wrappers=1:nokey=1 "{output}"', shell=True, capture_output=True, text=True, timeout=10)
-                    h = probe.stdout.strip()
-                    print(f"YT-DLP SUCCESS {i} - {size_mb:.2f} MB - Height: {h}p HD")
-                except:
-                    print(f"YT-DLP SUCCESS {i} - {size_mb:.2f} MB HD")
-                return output
-            else:
-                print(f"Strategy {i} failed - stdout:{result.stdout[-200:]} stderr:{result.stderr[-200:]}")
-            Path(output).unlink(missing_ok=True)
-        except subprocess.TimeoutExpired:
-            print(f"Strategy {i} TIMEOUT after 60s")
-            Path(output).unlink(missing_ok=True)
-            continue
-        except Exception as e:
-            print(f"Strategy {i} err {e}")
-            continue
+    # Try with cookies first, then without cookies if needed (V34 fix for cookie error)
+    for use_cookies in ([True, False] if has_cookies else [False]):
+        c_arg = cookie_arg if use_cookies else ""
+        mode = "with cookies" if use_cookies else "without cookies"
+        for i, base in enumerate(base_strategies, 1):
+            cmd = f'yt-dlp {c_arg} {base}'
+            try:
+                res_label = ["2160p(4K)", "1440p(2K)", "1080p", "720p", "android-best", "best"][i-1]
+                print(f"Trying 2K strategy {i} {res_label} {mode}...")
+                result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=90)
+                if Path(output).exists() and Path(output).stat().st_size > 50000:
+                    size_mb = Path(output).stat().st_size/1024/1024
+                    try:
+                        probe = subprocess.run(f'ffprobe -v error -select_streams v:0 -show_entries stream=height -of default=noprint_wrappers=1:nokey=1 "{output}"', shell=True, capture_output=True, text=True, timeout=10)
+                        h = probe.stdout.strip()
+                        print(f"YT-DLP SUCCESS {i} {res_label} {mode} - {size_mb:.2f} MB - Height: {h}p - 2K HD")
+                    except:
+                        print(f"YT-DLP SUCCESS {i} {res_label} {mode} - {size_mb:.2f} MB - 2K HD")
+                    return output
+                else:
+                    err = (result.stderr or "") + (result.stdout or "")
+                    if "do-i-pass-cookies-to-yt-dlp" in err.lower() or ("cookies" in err.lower() and use_cookies):
+                        print(f"Strategy {i} {mode} cookies error - will retry without cookies: {err[-200:]}")
+                    else:
+                        print(f"Strategy {i} {res_label} {mode} failed - {err[-300:]}")
+                Path(output).unlink(missing_ok=True)
+            except subprocess.TimeoutExpired:
+                print(f"Strategy {i} {mode} TIMEOUT after 90s")
+                Path(output).unlink(missing_ok=True)
+                continue
+            except Exception as e:
+                print(f"Strategy {i} {mode} err {e}")
+                continue
+        if use_cookies:
+            print("All strategies with cookies failed, retrying WITHOUT cookies - V35 2K FIX")
     print("ALL YT-DLP FAILED")
     return None
+
+
 
 def download_trailer(youtube_url, output="trailer.mp4"):
     return download_via_ytdlp_fixed(youtube_url, output)
 
-
-
+def download_movie_poster(movie, output="poster.jpg"):
+    try:
+        poster_path = movie.get("poster_path")
+        if not poster_path:
+            return None
+        url = f"https://image.tmdb.org/t/p/original{poster_path}"
+        r = requests.get(url, timeout=20)
+        if r.status_code == 200:
+            with open(output, 'wb') as f:
+                f.write(r.content)
+            if Path(output).exists() and Path(output).stat().st_size > 1000:
+                return output
+    except Exception as e:
+        print(f"Poster err {e}")
+    return None
 
 
 
@@ -584,7 +623,7 @@ def build_caption(title, year, m_type, genre_str, rating, story_bn, link):
     return caption
 
 async def generate_tts_voice(text, output_path="voice.mp3"):
-    print(f"TTS: {len(text.split())} words RATE +28% PRO STUDIO V33 HD 1080p")
+    print(f"TTS: {len(text.split())} words RATE +28% PRO STUDIO V35 2K QHD 1440p")
     communicate = edge_tts.Communicate(text, VOICE, rate=RATE, pitch=PITCH, volume=VOLUME)
     await communicate.save(output_path)
     try:
@@ -634,55 +673,55 @@ def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp
             font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
             if not Path(font_path).exists():
                 font_path = "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
-        print(f"Creating {dur}s video FINAL V33 HD 1080p ZOOM 65% - Top: {label_top_safe} | {safe_title} | Type: {m_type}")
+        print(f"Creating {dur}s video FINAL V35 2K QHD 1080p ZOOM 65% 2K - Top: {label_top_safe} | {safe_title} | Type: {m_type}")
         if poster_path and Path(poster_path).exists():
             cmd = (
                 f"ffmpeg -y -loop 1 -t {dur} -i \"{poster_path}\" "
                 f"-i \"{trailer_path}\" -i \"{voice_path}\" -stream_loop -1 -i \"{bgm_path}\" "
-                f"-filter_complex \"[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=22:steps=3,setsar=1,trim=duration={dur}[bg];"
-                f"[1:v]scale=1080:1248:force_original_aspect_ratio=increase,crop=1080:1248,setsar=1[fg];"
-                f"[bg][fg]overlay=(W-w)/2:(H-h)/2:shortest=0,scale=1080:1920:flags=lanczos[base0];"
-                f"[base0]drawtext=text='{label_top_safe}':fontcolor=white:fontsize=38:box=1:boxcolor=black@0.70:boxborderw=10:borderw=2:bordercolor=black:"
-                f"x=(w-text_w)/2:y=70+3*sin(t*1.8):shadowcolor=black:shadowx=2:shadowy=2:fontfile={font_path}[base1];"
-                f"[base1]drawtext=text='{safe_title}':fontcolor=white:fontsize=62:box=1:boxcolor=black@0.75:boxborderw=14:borderw=3:bordercolor=black:"
-                f"x=(w-text_w)/2:y=120+4*sin(t*1.8):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[base_top];"
-                f"[base_top]drawtext=text='Watch on':fontcolor=white:fontsize=36:box=1:boxcolor=black@0.70:boxborderw=10:borderw=2:bordercolor=black:"
-                f"x=(w-text_w)/2:y=h-200-3*sin(t*2.2):shadowcolor=black:shadowx=2:shadowy=2:fontfile={font_path}[base2];"
-                f"[base2]drawtext=text='movimoon.online':fontcolor=yellow:fontsize=52:box=1:boxcolor=black@0.75:boxborderw=14:borderw=3:bordercolor=black:"
-                f"x=(w-text_w)/2:y=h-150-4*sin(t*2.2):shadowcolor=black:shadowx=3:shadowy=3:fontfile={font_path}[final_v];"
+                f"-filter_complex \"[0:v]scale=1440:2560:force_original_aspect_ratio=increase,crop=1440:2560,gblur=sigma=30:steps=3,setsar=1,trim=duration={dur}[bg];"
+                f"[1:v]scale=1440:1664:force_original_aspect_ratio=increase,crop=1440:1664,setsar=1[fg];"
+                f"[bg][fg]overlay=(W-w)/2:(H-h)/2:shortest=0,scale=1440:2560:flags=lanczos[base0];"
+                f"[base0]drawtext=text='{label_top_safe}':fontcolor=white:fontsize=50:box=1:boxcolor=black@0.70:boxborderw=13:borderw=2:bordercolor=black:"
+                f"x=(w-text_w)/2:y=90+4*sin(t*1.8):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[base1];"
+                f"[base1]drawtext=text='{safe_title}':fontcolor=white:fontsize=82:box=1:boxcolor=black@0.75:boxborderw=18:borderw=4:bordercolor=black:"
+                f"x=(w-text_w)/2:y=160+5*sin(t*1.8):shadowcolor=black:shadowx=5:shadowy=5:fontfile={font_path}[base_top];"
+                f"[base_top]drawtext=text='Watch on':fontcolor=white:fontsize=48:box=1:boxcolor=black@0.70:boxborderw=13:borderw=2:bordercolor=black:"
+                f"x=(w-text_w)/2:y=h-260-4*sin(t*2.2):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[base2];"
+                f"[base2]drawtext=text='movimoon.online':fontcolor=yellow:fontsize=70:box=1:boxcolor=black@0.75:boxborderw=18:borderw=4:bordercolor=black:"
+                f"x=(w-text_w)/2:y=h-190-5*sin(t*2.2):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[final_v];"
                 f"[1:a]volume=0.30[trailer_low];[3:a]volume=0.40[bg_vol];[2:a]asplit=2[voice_sc][voice_mix];"
                 f"[bg_vol][voice_sc]sidechaincompress=threshold=0.015:ratio=8:attack=20:release=400:makeup=1[ducked];"
                 f"[trailer_low][ducked][voice_mix]amix=inputs=3:duration=longest:dropout_transition=0:weights=0.30 0.35 1,volume=1.25,loudnorm=I=-16:TP=-1.5:LRA=8[a]\" "
-                f"-map \"[final_v]\" -map \"[a]\" -c:v libx264 -profile:v high -level:v 4.2 -preset slow -crf 16 -pix_fmt yuv420p -r 30 -movflags +faststart -c:a aac -b:a 192k -t {dur} \"{output}\""
+                f"-map \"[final_v]\" -map \"[a]\" -c:v libx264 -profile:v high -level:v 5.1 -preset slow -crf 18 -pix_fmt yuv420p -r 30 -movflags +faststart -c:a aac -b:a 256k -t {dur} \"{output}\""
             )
         else:
             cmd = (
                 f"ffmpeg -y -i \"{trailer_path}\" -i \"{voice_path}\" -stream_loop -1 -i \"{bgm_path}\" "
-                f"-filter_complex \"[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=22:steps=3[bg];"
-                f"[0:v]scale=1080:1248:force_original_aspect_ratio=increase,crop=1080:1248[fg];"
-                f"[bg][fg]overlay=(W-w)/2:(H-h)/2,scale=1080:1920:flags=lanczos[base0];"
-                f"[base0]drawtext=text='{label_top_safe}':fontcolor=white:fontsize=38:box=1:boxcolor=black@0.70:boxborderw=10:borderw=2:bordercolor=black:"
-                f"x=(w-text_w)/2:y=70+3*sin(t*1.8):shadowcolor=black:shadowx=2:shadowy=2:fontfile={font_path}[base1];"
-                f"[base1]drawtext=text='{safe_title}':fontcolor=white:fontsize=62:box=1:boxcolor=black@0.75:boxborderw=14:borderw=3:bordercolor=black:"
-                f"x=(w-text_w)/2:y=120+4*sin(t*1.8):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[base_top];"
-                f"[base_top]drawtext=text='Watch on':fontcolor=white:fontsize=36:box=1:boxcolor=black@0.70:boxborderw=10:borderw=2:bordercolor=black:"
-                f"x=(w-text_w)/2:y=h-200-3*sin(t*2.2):shadowcolor=black:shadowx=2:shadowy=2:fontfile={font_path}[base2];"
-                f"[base2]drawtext=text='movimoon.online':fontcolor=yellow:fontsize=52:box=1:boxcolor=black@0.75:boxborderw=14:borderw=3:bordercolor=black:"
-                f"x=(w-text_w)/2:y=h-150-4*sin(t*2.2):shadowcolor=black:shadowx=3:shadowy=3:fontfile={font_path}[final_v];"
+                f"-filter_complex \"[0:v]scale=1440:2560:force_original_aspect_ratio=increase,crop=1440:2560,gblur=sigma=30:steps=3[bg];"
+                f"[0:v]scale=1440:1664:force_original_aspect_ratio=increase,crop=1440:1664[fg];"
+                f"[bg][fg]overlay=(W-w)/2:(H-h)/2,scale=1440:2560:flags=lanczos[base0];"
+                f"[base0]drawtext=text='{label_top_safe}':fontcolor=white:fontsize=50:box=1:boxcolor=black@0.70:boxborderw=13:borderw=2:bordercolor=black:"
+                f"x=(w-text_w)/2:y=90+4*sin(t*1.8):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[base1];"
+                f"[base1]drawtext=text='{safe_title}':fontcolor=white:fontsize=82:box=1:boxcolor=black@0.75:boxborderw=18:borderw=4:bordercolor=black:"
+                f"x=(w-text_w)/2:y=160+5*sin(t*1.8):shadowcolor=black:shadowx=5:shadowy=5:fontfile={font_path}[base_top];"
+                f"[base_top]drawtext=text='Watch on':fontcolor=white:fontsize=48:box=1:boxcolor=black@0.70:boxborderw=13:borderw=2:bordercolor=black:"
+                f"x=(w-text_w)/2:y=h-260-4*sin(t*2.2):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[base2];"
+                f"[base2]drawtext=text='movimoon.online':fontcolor=yellow:fontsize=70:box=1:boxcolor=black@0.75:boxborderw=18:borderw=4:bordercolor=black:"
+                f"x=(w-text_w)/2:y=h-190-5*sin(t*2.2):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[final_v];"
                 f"[0:a]volume=0.30[trailer_low];[2:a]volume=0.40[bg_vol];[1:a]asplit=2[voice_sc][voice_mix];"
                 f"[bg_vol][voice_sc]sidechaincompress=threshold=0.015:ratio=8:attack=20:release=400:makeup=1[ducked];"
                 f"[trailer_low][ducked][voice_mix]amix=inputs=3:duration=longest:dropout_transition=0:weights=0.30 0.35 1,volume=1.25,loudnorm=I=-16:TP=-1.5:LRA=8[a]\" "
-                f"-map \"[final_v]\" -map \"[a]\" -c:v libx264 -profile:v high -level:v 4.2 -preset slow -crf 16 -pix_fmt yuv420p -r 30 -movflags +faststart -c:a aac -b:a 192k -t {dur} \"{output}\""
+                f"-map \"[final_v]\" -map \"[a]\" -c:v libx264 -profile:v high -level:v 5.1 -preset slow -crf 18 -pix_fmt yuv420p -r 30 -movflags +faststart -c:a aac -b:a 256k -t {dur} \"{output}\""
             )
-        print(f"FFmpeg FINAL V33 HD {dur}s...")
+        print(f"FFmpeg FINAL V35 2K QHD {dur}s...")
         result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=240)
         if Path(output).exists() and Path(output).stat().st_size > 50000:
-            print(f"Final OK V30 {Path(output).stat().st_size/1024/1024:.2f} MB - ZOOM 65% + 2-LINE TITLE + DYNAMIC WORDS")
+            print(f"Final OK V35 2K QHD {Path(output).stat().st_size/1024/1024:.2f} MB - ZOOM 65% + 2-LINE TITLE + DYNAMIC WORDS")
             return output
         print(f"FFmpeg err {result.stderr[-1500:]}")
         return None
     except Exception as e:
-        print(f"V30 Error {e}")
+        print(f"V35 2K Error {e}")
         import traceback; traceback.print_exc()
         return None
 
@@ -865,7 +904,7 @@ def upload_video_to_facebook(page_id, token, video_path, caption, label):
         return None
 
 async def main():
-    print("=== MoviMoon AutoPoster V33 HD 1080p FB+YT START ===")
+    print("=== MoviMoon AutoPoster V35 2K QHD 1440p FB+YT START ===")
     history = load_history()
     movies = get_trending_mixed()
     if not movies:
@@ -987,7 +1026,7 @@ async def main():
             print(f"Error processing movie {movie.get('id')}: {e}")
             import traceback; traceback.print_exc()
             continue
-    print("=== MoviMoon AutoPoster V33 END ===")
+    print("=== MoviMoon AutoPoster V35 2K END ===")
 
 if __name__ == "__main__":
     asyncio.run(main())
