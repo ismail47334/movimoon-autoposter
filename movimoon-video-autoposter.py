@@ -2,7 +2,7 @@ import os, requests, random, re, time, asyncio, json, subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
 
-print("=== MoviMoon Bot - FINAL V28 HD 1080p | DOWNLOAD HD + ZOOM 65% + TEXT FIX + UPLOAD HD + PAGE ONLY SUCCESS ===")
+print("=== MoviMoon Bot - FINAL V29 HD 1080p | FB + YT SHORTS | SEO + PAGE ONLY SUCCESS ===")
 
 try:
     import edge_tts
@@ -25,9 +25,14 @@ FB_PAGE_TOKEN = os.getenv("FB_PAGE_TOKEN")
 FB_GROUP_ID = os.getenv("FB_GROUP_ID")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+# YouTube Shorts - V29 NEW
+YOUTUBE_CLIENT_ID = os.getenv("YOUTUBE_CLIENT_ID")
+YOUTUBE_CLIENT_SECRET = os.getenv("YOUTUBE_CLIENT_SECRET")
+YOUTUBE_REFRESH_TOKEN = os.getenv("YOUTUBE_REFRESH_TOKEN")
+YOUTUBE_CHANNEL_ID = os.getenv("YOUTUBE_CHANNEL_ID", "")
 
 VOICE = "bn-IN-BashkarNeural"
-RATE = "+28%"
+RATE = "+30%"
 PITCH = "+2Hz"
 VOLUME = "+35%"
 HISTORY_FILE = "posted_history.json"
@@ -359,8 +364,7 @@ def call_groq_fallback(movie_title, year, m_type, rating, overview, link, genre_
 STRICT WORD COUNT: EXACTLY 165-170 Bengali words. Max 170, never over 170. 60 seconds voice.
 Movie Title: {title} Year: {year} Rating: {rating}/10 Genre: {genre_str} Plot: {overview} Link: {link}
 STRUCTURE: HOOK 28-30 words, STORY 55-60, ACTING 50-55, CTA 20-25 words. TOTAL 165-170.
-RULES: Pure Bengali, no English. Say "মুভিমুন ডট অনলাইন" not "মুভিমুন অনলাইন ডট কম". 
-In outro must say "পুরো সিনেমাটি দেখতে ভিজিট করুন মুভিমুন ডট অনলাইন".
+RULES: Pure Bengali, no English. Say "মুভিমুন ডট অনলাইন" not "মুভিমুন অনলাইন ডট কম". In outro say "পুরো সিনেমাটি দেখতে ভিজিট করুন মুভিমুন ডট অনলাইন".
 OUTPUT ONLY JSON: {{"voiceover": "165-170 words Bengali...", "bangla_title": "title", "caption": "...", "word_count": 168}}"""
         groq_models = ["llama-3.3-70b-specdec", "llama-3.3-70b-versatile", "meta-llama/llama-4-maverick-17b-128e-instruct", "meta-llama/llama-4-scout-17b-16e-instruct", "qwen/qwen3-32b", "moonshotai/kimi-k2-instruct", "llama3-70b-8192", "llama3-8b-8192", "openai/gpt-oss-20b", "openai/gpt-oss-120b"]
         completion = None
@@ -412,8 +416,7 @@ If under 165 or over 170 = FAILURE.
 
 INPUT: Movie Title: {title} Year: {year} Rating: {rating}/10 Genre: {genre_str} Plot: {overview} Link: {link}
 STRUCTURE: HOOK 28-30 words, STORY 55-60, ACTING 50-55, CTA 20-25. TOTAL 165-170.
-RULES: Pure Bengali, no English. Say "মুভিমুন ডট অনলাইন" not "মুভিমুন অনলাইন ডট কম". 
-In outro MUST say "পুরো সিনেমাটি দেখতে ভিজিট করুন মুভিমুন ডট অনলাইন".
+RULES: Pure Bengali, no English. Say "মুভিমুন ডট অনলাইন" not "মুভিমুন অনলাইন ডট কম". In outro MUST say "পুরো সিনেমাটি দেখতে ভিজিট করুন মুভিমুন ডট অনলাইন".
 OUTPUT ONLY JSON: {{"voiceover": "165-170 words...", "bangla_title": "title", "caption": "...", "word_count": 168}}"""
 
     models = ["gemini-3.5-flash-lite", "gemini-3.5-flash"]
@@ -549,7 +552,7 @@ def build_caption(title, year, m_type, genre_str, rating, story_bn, link):
     return caption
 
 async def generate_tts_voice(text, output_path="voice.mp3"):
-    print(f"TTS: {len(text.split())} words RATE +28% PRO STUDIO V28 HD 1080p")
+    print(f"TTS: {len(text.split())} words RATE +30% PRO STUDIO V28 HD 1080p")
     communicate = edge_tts.Communicate(text, VOICE, rate=RATE, pitch=PITCH, volume=VOLUME)
     await communicate.save(output_path)
     try:
@@ -655,6 +658,165 @@ def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp
         import traceback; traceback.print_exc()
         return None
 
+
+def build_youtube_seo_metadata(title, year, m_type, genre_str, rating, story_bn, link, bangla_title, overview):
+    """Build SEO-friendly YouTube Shorts title, description, tags"""
+    # Clean title for SEO
+    en_title = title.strip()
+    bn_title = bangla_title.strip() if bangla_title else en_title
+    
+    # Type label
+    type_label = "Movie" if m_type == "movie" else "Web Series"
+    type_bn = "সিনেমা" if m_type == "movie" else "সিরিজ"
+    
+    # SEO Title: 100 chars max, include keywords
+    # Format: Bengali Title | English Title (Year) Explained #Shorts
+    # Fallback if too long
+    base_title = f"{bn_title} | {en_title} ({year})"
+    if len(base_title) > 70:
+        base_title = f"{en_title} ({year})"
+    if len(base_title) > 80:
+        base_title = base_title[:80]
+    yt_title = f"{base_title} Explained #Shorts"
+    if len(yt_title) > 100:
+        yt_title = f"{en_title} ({year}) #Shorts"
+    yt_title = yt_title[:100]
+    
+    # SEO Description - 5000 chars max, keyword rich
+    genre_keywords = genre_str.replace(", ", ", ") if genre_str else "Drama"
+    hashtags = f"#Shorts #{en_title.replace(' ', '')} #{type_label} #MoviMoon #MovieReview #BengaliReview #Hollywood #Bollywood #New{type_label}{year} #Trending{type_label}"
+    
+    description = f"""🎬 {en_title} ({year}) - {type_label} Review & Story Explained in Bengali
+
+{story_bn}
+
+📖 Full Story:
+{overview[:300] if overview else f"An extraordinary {genre_keywords} story that will touch your heart."}
+
+🎭 Genre: {genre_keywords}
+⭐ Rating: {rating}/10
+📅 Year: {year}
+
+🔗 Watch Full Details: {link}
+🌐 Website: https://movimoon.online
+
+👉 এই {type_bn}টি কেমন লাগলো কমেন্টে জানান!
+👉 এরকম আরো {type_bn} রিভিউ পেতে চ্যানেলটি সাবস্ক্রাইব করুন
+
+{hashtags}
+
+#movimoon #movimoononline #banglamoviereview #moviereviewbengali #newmovie{year} #upcomingmovie #moviereview
+
+---
+Disclaimer: This video uses trailer clips under fair use for review purposes. All rights belong to respective owners.
+"""
+    # Trim description to 4500 chars (YT limit 5000)
+    if len(description) > 4500:
+        description = description[:4500]
+    
+    # SEO Tags - max 500 chars total, 15 tags
+    tags = []
+    tags.append(en_title.lower())
+    tags.append(bn_title.lower())
+    tags.append(f"{en_title} {year}")
+    tags.append(f"{en_title} trailer")
+    tags.append(f"{en_title} review")
+    tags.append(f"{en_title} explained")
+    tags.append(f"{en_title} bengali")
+    tags.append(genre_keywords.lower())
+    tags.append(f"{type_label.lower()} {year}")
+    tags.append(f"new {type_label.lower()} {year}")
+    tags.append(f"{type_label.lower()} review bengali")
+    tags.append("movimoon")
+    tags.append("movimoon.online")
+    tags.append("bengali movie review")
+    tags.append("shorts")
+    # Clean tags
+    clean_tags = []
+    for t in tags:
+        t = t.strip().lower()
+        t = t[:30]  # tag max 30 chars
+        if t and len(t) > 1 and t not in clean_tags:
+            clean_tags.append(t)
+    clean_tags = clean_tags[:15]
+    
+    return yt_title, description, clean_tags
+
+
+def upload_video_to_youtube(video_path, yt_title, yt_description, yt_tags):
+    """Upload video to YouTube Shorts using Data API v3 - SEO optimized"""
+    if not YOUTUBE_CLIENT_ID or not YOUTUBE_CLIENT_SECRET or not YOUTUBE_REFRESH_TOKEN:
+        print("⚠️ YouTube credentials not set (YOUTUBE_CLIENT_ID/SECRET/REFRESH_TOKEN), skipping YouTube upload")
+        return None
+    
+    try:
+        print(f"Uploading to YouTube Shorts: {yt_title} - {Path(video_path).stat().st_size/1024/1024:.2f} MB")
+        # Import here to not break if not installed
+        try:
+            from google.oauth2.credentials import Credentials
+            from googleapiclient.discovery import build
+            from googleapiclient.http import MediaFileUpload
+        except ImportError as ie:
+            print(f"YouTube libraries not installed: {ie}, installing...")
+            subprocess.check_call(["pip", "install", "google-api-python-client", "google-auth", "google-auth-oauthlib", "google-auth-httplib2"])
+            from google.oauth2.credentials import Credentials
+            from googleapiclient.discovery import build
+            from googleapiclient.http import MediaFileUpload
+        
+        creds = Credentials(
+            None,
+            refresh_token=YOUTUBE_REFRESH_TOKEN,
+            client_id=YOUTUBE_CLIENT_ID,
+            client_secret=YOUTUBE_CLIENT_SECRET,
+            token_uri="https://oauth2.googleapis.com/token",
+            scopes=["https://www.googleapis.com/auth/youtube.upload"]
+        )
+        
+        youtube = build('youtube', 'v3', credentials=creds)
+        
+        # Media upload
+        media = MediaFileUpload(video_path, mimetype='video/mp4', resumable=True)
+        
+        body = {
+            "snippet": {
+                "title": yt_title,
+                "description": yt_description,
+                "tags": yt_tags,
+                "categoryId": "24",  # Entertainment
+                "defaultLanguage": "bn",
+                "defaultAudioLanguage": "bn"
+            },
+            "status": {
+                "privacyStatus": "public",
+                "selfDeclaredMadeForKids": False,
+                "madeForKids": False
+            }
+        }
+        
+        request = youtube.videos().insert(
+            part="snippet,status",
+            body=body,
+            media_body=media
+        )
+        
+        response = None
+        while response is None:
+            status, response = request.next_chunk()
+            if status:
+                print(f"YouTube upload {int(status.progress()*100)}%")
+        
+        print(f"✅ YOUTUBE SHORTS UPLOADED - ID: {response.get('id')} - https://youtube.com/shorts/{response.get('id')}")
+        return response
+        
+    except Exception as e:
+        print(f"❌ YouTube Upload Error: {e}")
+        import traceback; traceback.print_exc()
+        # Quota check
+        if "quota" in str(e).lower():
+            print("⚠️ YouTube quota exceeded (100/day limit). Will retry next run.")
+        return None
+
+
 def upload_video_to_facebook(page_id, token, video_path, caption, label):
     try:
         print(f"Uploading {label} - {Path(video_path).stat().st_size/1024/1024:.2f} MB")
@@ -673,7 +835,7 @@ def upload_video_to_facebook(page_id, token, video_path, caption, label):
         return None
 
 async def main():
-    print("=== MoviMoon AutoPoster V28 HD 1080p START ===")
+    print("=== MoviMoon AutoPoster V29 HD 1080p FB+YT START ===")
     history = load_history()
     movies = get_trending_mixed()
     if not movies:
@@ -732,7 +894,7 @@ async def main():
                 continue
             fb_result = upload_video_to_facebook(FB_PAGE_ID, FB_PAGE_TOKEN, final_video, caption, title)
             if fb_result:
-                # V28 + FIX: PAGE POSTED = WORKFLOW DONE, no 2nd try
+                # V29: PAGE POSTED = WORKFLOW DONE, no 2nd try + YT SHORTS OPTIONAL
                 print(f"✅ PAGE POSTED SUCCESSFULLY - ID: {fb_result.get('id','unknown')}")
                 history[tmdb_id] = datetime.now().isoformat()
                 save_history(history)
@@ -749,7 +911,22 @@ async def main():
                     except Exception as ge:
                         print(f"⚠️ Group error ignored: {ge} - PAGE SUCCESS = WORK DONE")
                 else:
-                    print(f"No FB_GROUP_ID, PAGE ONLY mode - WORK DONE")
+                    print(f"No FB_GROUP_ID, PAGE ONLY mode")
+                
+                # YOUTUBE SHORTS OPTIONAL - SEO Optimized - fail holeo page success = done
+                try:
+                    print(f"Building YouTube SEO metadata for {title}...")
+                    yt_title, yt_description, yt_tags = build_youtube_seo_metadata(title, year, m_type, genre_str, rating, story_bn, link, bangla_title, overview)
+                    print(f"YouTube Title: {yt_title}")
+                    print(f"YouTube Tags: {', '.join(yt_tags[:5])}...")
+                    yt_result = upload_video_to_youtube(final_video, yt_title, yt_description, yt_tags)
+                    if yt_result:
+                        print(f"✅ YOUTUBE SHORTS ALSO POSTED - https://youtube.com/shorts/{yt_result.get('id')}")
+                    else:
+                        print(f"⚠️ YouTube upload failed/skip but PAGE SUCCESS - WORK DONE")
+                except Exception as ye:
+                    print(f"⚠️ YouTube error ignored: {ye} - PAGE SUCCESS = WORK DONE")
+                
                 # Cleanup
                 for f in ["trailer.mp4", "trailer_60s.mp4", "poster.jpg", "voice.mp3", "bgm.mp3", "final.mp4"]:
                     try:
@@ -757,7 +934,7 @@ async def main():
                             Path(f).unlink()
                     except:
                         pass
-                print(f"🎉 1 VIDEO DONE - WORKFLOW COMPLETE - STOPPING, NO 2nd TRY")
+                print(f"🎉 1 VIDEO DONE - FB + YT (optional) - WORKFLOW COMPLETE - STOPPING, NO 2nd TRY")
                 break
             else:
                 print(f"Failed to post {title}")
@@ -774,7 +951,7 @@ async def main():
             print(f"Error processing movie {movie.get('id')}: {e}")
             import traceback; traceback.print_exc()
             continue
-    print("=== MoviMoon AutoPoster V28 END ===")
+    print("=== MoviMoon AutoPoster V29 END ===")
 
 if __name__ == "__main__":
     asyncio.run(main())
