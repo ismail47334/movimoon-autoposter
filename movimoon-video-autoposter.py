@@ -2,7 +2,7 @@ import os, requests, random, re, time, asyncio, json, subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
 
-print("=== MoviMoon Bot - FINAL V39 SELECT-FILTER 1440p SMART-CUT | DYNAMIC WORDS + 2-LINE TITLE + FB + YT SHORTS ===")
+print("=== MoviMoon Bot - FINAL V40 SELECT-FILTER 1440p SMART-CUT | DYNAMIC WORDS + 2-LINE TITLE + FB + YT SHORTS ===")
 
 try:
     import edge_tts
@@ -174,7 +174,7 @@ def get_video_duration(video_path):
 
 
 def download_via_ytdlp_fixed(youtube_url, output="trailer.mp4"):
-    print(f"YT-DLP START 1440p MAX QHD {youtube_url}")
+    print(f"YT-DLP V40 START - V28 STYLE + BOT BYPASS {youtube_url}")
     Path(output).unlink(missing_ok=True)
     cookie_arg = ""
     has_cookies = False
@@ -183,50 +183,81 @@ def download_via_ytdlp_fixed(youtube_url, output="trailer.mp4"):
         has_cookies = True
         print(f"Using cookies.txt ({Path('cookies.txt').stat().st_size} bytes)")
     else:
-        print("No cookies.txt, trying without")
+        print("No cookies.txt, trying WITHOUT - using android/ios clients to bypass bot check")
+    
+    # V40 - V28 FOLLOW + 2024/2025 YouTube bot bypass
+    # Key: Use multiple player clients to bypass "Sign in to confirm you're not a bot"
+    # From yt-dlp docs: android, ios, mweb, tv_embedded, web_safari are most effective for bot bypass
     base_strategies = [
-        f'-f "bestvideo[height<=1440][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=1440]+bestaudio/best[height<=1440][ext=mp4]/best[height<=1440]" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings -q --retries 1 --fragment-retries 1',
-        f'-f "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best[height<=1080]" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings -q --retries 1 --fragment-retries 1',
-        f'-f "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings -q --retries 1 --fragment-retries 1',
-        f'--extractor-args "youtube:player_client=android" -f "best[height<=1440]/best[height<=1080]/best[height<=720]/best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings -q --retries 1',
-        f'-f "best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings -q --retries 1',
+        # Strategy 1: Android + iOS + MWEB (best bypass for GitHub Actions) - 1080p MAX like V28
+        f'--extractor-args "youtube:player_client=android,ios,mweb" --extractor-args "youtube:player_skip=webpage,configs" -f "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080]" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings --retries 2 --fragment-retries 2',
+        # Strategy 2: TV embedded (very strong bypass)
+        f'--extractor-args "youtube:player_client=tv_embedded" -f "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings --retries 2',
+        # Strategy 3: Android only - lightweight, fastest
+        f'--extractor-args "youtube:player_client=android" -f "best[height<=1080]/best[height<=720]/best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings --retries 2',
+        # Strategy 4: iOS + web_safari (backup)
+        f'--extractor-args "youtube:player_client=ios,web_safari" -f "bestvideo[height<=720][ext=mp4]+bestaudio/best[height<=720]/best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings --retries 2',
+        # Strategy 5: V28 EXACT - simple best (last fallback)
+        f'-f "best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings --retries 1',
+        # Strategy 6: EJS wrapper if available (yt-dlp-ejs bypasses better)
+        f'--extractor-args "youtube:player_client=android,ios" --extractor-args "youtubetab:skip=webpage" -f "best[height<=720]/best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --retries 2',
     ]
+    
+    # Try with and without cookies - like V28 but modern
     for use_cookies in ([True, False] if has_cookies else [False]):
         c_arg = cookie_arg if use_cookies else ""
-        mode = "with cookies" if use_cookies else "without cookies"
+        mode = "with cookies" if use_cookies else "without cookies (bypass mode)"
         for i, base in enumerate(base_strategies, 1):
-            cmd = f'yt-dlp {c_arg} {base}'
+            # For EJS, try yt-dlp-ejs binary if exists
+            bin_name = "yt-dlp"
+            if i == 6:
+                # Check if yt-dlp-ejs exists
+                try:
+                    import shutil
+                    if shutil.which("yt-dlp-ejs"):
+                        bin_name = "yt-dlp-ejs"
+                    else:
+                        bin_name = "yt-dlp"
+                except:
+                    bin_name = "yt-dlp"
+            cmd = f'{bin_name} {c_arg} {base}'
             try:
-                res_label = ["1440p(2K)", "1080p", "720p", "android-best", "best"][i-1]
-                print(f"Trying 1440p MAX strategy {i} {res_label} {mode}...")
-                result = __import__('subprocess').run(cmd, shell=True, capture_output=True, text=True, timeout=90)
+                res_labels = ["1080p android+ios+mweb BYPASS", "1080p tv_embedded BYPASS", "1080p android BYPASS", "720p ios+safari BYPASS", "best V28 FALLBACK", "720p EJS BYPASS"]
+                res_label = res_labels[i-1] if i <= len(res_labels) else f"strat{i}"
+                print(f"Trying V40 strategy {i} {res_label} {mode}...")
+                result = __import__('subprocess').run(cmd, shell=True, capture_output=True, text=True, timeout=120)
                 if Path(output).exists() and Path(output).stat().st_size > 50000:
                     size_mb = Path(output).stat().st_size/1024/1024
                     try:
                         probe = __import__('subprocess').run(f'ffprobe -v error -select_streams v:0 -show_entries stream=height -of default=noprint_wrappers=1:nokey=1 "{output}"', shell=True, capture_output=True, text=True, timeout=10)
                         h = probe.stdout.strip()
-                        print(f"YT-DLP SUCCESS {i} {res_label} {mode} - {size_mb:.2f} MB - Height: {h}p - 1440p MAX")
+                        print(f"YT-DLP V40 SUCCESS {i} {res_label} {mode} - {size_mb:.2f} MB - Height: {h}p - V28 STYLE")
                     except:
-                        print(f"YT-DLP SUCCESS {i} {res_label} {mode} - {size_mb:.2f} MB - 1440p MAX")
+                        print(f"YT-DLP V40 SUCCESS {i} {res_label} {mode} - {size_mb:.2f} MB - V28 STYLE")
                     return output
                 else:
                     err = (result.stderr or "") + (result.stdout or "")
-                    print(f"Strategy {i} {res_label} {mode} failed - {err[-300:]}")
+                    # Show last 400 chars
+                    err_short = err[-400:].replace("\n", " ")
+                    print(f"Strategy {i} {res_label} {mode} failed - {err_short}")
                 Path(output).unlink(missing_ok=True)
             except __import__('subprocess').TimeoutExpired:
-                print(f"Strategy {i} {mode} TIMEOUT 90s")
+                print(f"Strategy {i} {mode} TIMEOUT 120s")
                 Path(output).unlink(missing_ok=True)
                 continue
             except Exception as e:
                 print(f"Strategy {i} {mode} err {e}")
                 continue
         if use_cookies:
-            print("All with cookies failed, retry WITHOUT cookies - V39")
-    print("ALL YT-DLP FAILED")
+            print("All with cookies failed, retry WITHOUT cookies - V40 BYPASS MODE")
+    print("ALL YT-DLP V40 FAILED - YouTube bot detection may need cookies.txt update")
+    print("TIP: Export fresh cookies.txt from browser and upload to repo secrets")
     return None
 
 def download_trailer(youtube_url, output="trailer.mp4"):
     return download_via_ytdlp_fixed(youtube_url, output)
+
+
 
 def download_movie_poster(movie, output="poster.jpg"):
     try:
@@ -318,7 +349,7 @@ def smart_trim_trailer_to_60s(input_path, output_path="trailer_60s.mp4"):
             print(f"No trim needed {dur:.1f}s <=62s - full trailer")
             return input_path
         
-        print(f"Smart trim V39 START {dur:.1f}s -> 60s | Sampling whole trailer")
+        print(f"Smart trim V40 START {dur:.1f}s -> 60s | Sampling whole trailer")
         Path(output_path).unlink(missing_ok=True)
         
         # Determine cuts based on duration - covers start to end
@@ -356,11 +387,11 @@ def smart_trim_trailer_to_60s(input_path, output_path="trailer_60s.mp4"):
                 end = start + cut_dur
             cuts.append((round(start, 2), round(end, 2)))
         
-        print(f"Trim plan V39: {num_cuts} cuts x {cut_dur}s every {interval:.1f}s = 60s total")
+        print(f"Trim plan V40: {num_cuts} cuts x {cut_dur}s every {interval:.1f}s = 60s total")
         for idx, (s, e) in enumerate(cuts):
             print(f"  Cut {idx+1}: {s:.1f}s - {e:.1f}s")
         
-        # V39 FIX: Use select/aselect filter - single pass, no concat, very reliable
+        # V40 FIX: Use select/aselect filter - single pass, no concat, very reliable
         # Build select expression: between(t,start,end)+between(t,start2,end2)...
         select_parts = []
         for s, e in cuts:
@@ -373,17 +404,17 @@ def smart_trim_trailer_to_60s(input_path, output_path="trailer_60s.mp4"):
         
         cmd = f'ffmpeg -y -i "{input_path}" -filter_complex "{filter_complex}" -map "[v]" -map "[a]" -c:v libx264 -preset veryfast -crf 23 -c:a aac "{output_path}"'
         
-        print(f"Running V39 select filter with {num_cuts} cuts...")
+        print(f"Running V40 select filter with {num_cuts} cuts...")
         print(f"Select expr: {select_expr[:200]}...")
         result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=180)
         
         if Path(output_path).exists() and Path(output_path).stat().st_size > 50000:
             final_dur = get_video_duration(output_path)
-            print(f"Smart trim V39 DONE {final_dur:.1f}s from {dur:.1f}s with {num_cuts} cuts across whole trailer - COPYRIGHT SAFE")
+            print(f"Smart trim V40 DONE {final_dur:.1f}s from {dur:.1f}s with {num_cuts} cuts across whole trailer - COPYRIGHT SAFE")
             return output_path
         
-        print(f"V39 select method failed: {result.stderr[-800:]}")
-        print(f"Trying V39 fallback method 2: segment concat with veryfast")
+        print(f"V40 select method failed: {result.stderr[-800:]}")
+        print(f"Trying V40 fallback method 2: segment concat with veryfast")
         
         # Fallback 2: Try with re-encode each segment quickly using concat demuxer file
         try:
@@ -412,7 +443,7 @@ def smart_trim_trailer_to_60s(input_path, output_path="trailer_60s.mp4"):
             
             if Path(output_path).exists() and Path(output_path).stat().st_size > 50000:
                 final_dur = get_video_duration(output_path)
-                print(f"Smart trim V39 fallback DONE {final_dur:.1f}s with {num_cuts} cuts")
+                print(f"Smart trim V40 fallback DONE {final_dur:.1f}s with {num_cuts} cuts")
                 return output_path
         except Exception as fe:
             print(f"Fallback 2 err {fe}")
@@ -427,7 +458,7 @@ def smart_trim_trailer_to_60s(input_path, output_path="trailer_60s.mp4"):
         return input_path
         
     except Exception as e:
-        print(f"Smart trim V39 err {e}")
+        print(f"Smart trim V40 err {e}")
         import traceback; traceback.print_exc()
         return input_path
 
@@ -542,8 +573,8 @@ def call_gemini_video_script(title, year, m_type, rating, overview, link, movie=
     else:
         genre_direction = "GENERAL: Focus on central premise, conflict, what makes this title distinctive, emotional or suspenseful core."
 
-    # V39 MASTER PROMPT - Hybrid
-    prompt = f"""# MOVIMOON CINEMATIC REVIEW MASTER PROMPT - V39 HYBRID
+    # V40 MASTER PROMPT - Hybrid
+    prompt = f"""# MOVIMOON CINEMATIC REVIEW MASTER PROMPT - V40 HYBRID
 
 ## ROLE & IDENTITY
 You are the Chief Cinematic Storyteller, Professional Bengali Movie Reviewer, Trailer Narration Director for MoviMoon. Think like an experienced film critic who understands storytelling, character motivations, direction, cinematography, suspense, emotional payoff, and audience psychology. Your narration must sound like a real professional Bangladeshi cinema presenter - not AI summarizing.
@@ -643,7 +674,7 @@ Return JSON only.
     models = ["gemini-3.5-flash-lite"]
 
     def smart_expand_to_limit(current_voice, current_wc, target_min=165, target_max=170):
-        # V39 - More specific, genre-aware expansions - not generic
+        # V40 - More specific, genre-aware expansions - not generic
         expansions = [
             f"এই {genre_str_bn or 'গল্প'}তে প্রতিটি দৃশ্য গল্পের সাথে জড়িত।",
             "পরিচালকের গল্প বলার ধরন দর্শককে ধরে রাখবে।",
@@ -788,7 +819,7 @@ def build_caption(title, year, m_type, genre_str, rating, story_bn, link):
     return caption
 
 async def generate_tts_voice(text, output_path="voice.mp3"):
-    print(f"TTS: {len(text.split())} words RATE +28% PRO STUDIO V39 MASTER PROMPT 1440p")
+    print(f"TTS: {len(text.split())} words RATE +28% PRO STUDIO V40 MASTER PROMPT 1440p")
     communicate = edge_tts.Communicate(text, VOICE, rate=RATE, pitch=PITCH, volume=VOLUME)
     await communicate.save(output_path)
     try:
@@ -838,7 +869,7 @@ def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp
             font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
             if not Path(font_path).exists():
                 font_path = "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
-        print(f"Creating {dur}s video FINAL V39 SELECT-FILTER 1440p SMART-CUT ZOOM 65% 2K - Top: {label_top_safe} | {safe_title} | Type: {m_type}")
+        print(f"Creating {dur}s video FINAL V40 SELECT-FILTER 1440p SMART-CUT ZOOM 65% 2K - Top: {label_top_safe} | {safe_title} | Type: {m_type}")
         if poster_path and Path(poster_path).exists():
             cmd = (
                 f"ffmpeg -y -loop 1 -t {dur} -i \"{poster_path}\" "
@@ -878,15 +909,15 @@ def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp
                 f"[trailer_low][ducked][voice_mix]amix=inputs=3:duration=longest:dropout_transition=0:weights=0.30 0.35 1,volume=1.25,loudnorm=I=-16:TP=-1.5:LRA=8[a]\" "
                 f"-map \"[final_v]\" -map \"[a]\" -c:v libx264 -profile:v high -level:v 4.2 -preset fast -crf 20 -pix_fmt yuv420p -r 30 -movflags +faststart -c:a aac -b:a 192k -t {dur} \"{output}\""
             )
-        print(f"FFmpeg FINAL V39 SELECT-FILTER 1440p SMART-CUT {dur}s...")
+        print(f"FFmpeg FINAL V40 SELECT-FILTER 1440p SMART-CUT {dur}s...")
         result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=600)
         if Path(output).exists() and Path(output).stat().st_size > 50000:
-            print(f"Final OK V39 MASTER-PROMPT HYBRID 1440p {Path(output).stat().st_size/1024/1024:.2f} MB - ZOOM 65% + 2-LINE TITLE + DYNAMIC WORDS")
+            print(f"Final OK V40 MASTER-PROMPT HYBRID 1440p {Path(output).stat().st_size/1024/1024:.2f} MB - ZOOM 65% + 2-LINE TITLE + DYNAMIC WORDS")
             return output
         print(f"FFmpeg err {result.stderr[-1500:]}")
         return None
     except Exception as e:
-        print(f"V39 Error {e}")
+        print(f"V40 Error {e}")
         import traceback; traceback.print_exc()
         return None
 
@@ -1071,7 +1102,7 @@ def upload_video_to_facebook(page_id, token, video_path, caption, label):
         return None
 
 async def main():
-    print("=== MoviMoon AutoPoster V39 MASTER-PROMPT HYBRID 1440p 1440p FB+YT START ===")
+    print("=== MoviMoon AutoPoster V40 V28 DOWNLOAD FIXED + MASTER PROMPT FB+YT START ===")
     history = load_history()
     movies = get_trending_mixed()
     if not movies:
@@ -1193,7 +1224,7 @@ async def main():
             print(f"Error processing movie {movie.get('id')}: {e}")
             import traceback; traceback.print_exc()
             continue
-    print("=== MoviMoon AutoPoster V39 END ===")
+    print("=== MoviMoon AutoPoster V40 V28 DOWNLOAD + MASTER PROMPT END ===")
 
 if __name__ == "__main__":
     asyncio.run(main())
