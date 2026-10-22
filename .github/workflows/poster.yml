@@ -1,4 +1,4 @@
-name: MoviMoon Video AutoPoster - FINAL V36 1440p MAX FB + YT SHORTS + PAGE ONLY SUCCESS
+name: MoviMoon Video AutoPoster - FINAL V37 FIXED-TRIM + MASTER PROMPT 1440p FB + YT + PAGE ONLY SUCCESS
 
 on:
   schedule:
@@ -46,7 +46,7 @@ jobs:
           fi
           ls -lh
 
-      - name: Run 1440p MAX Video Autoposter - FB + YT Shorts
+      - name: Run V37 FIXED-TRIM + MASTER PROMPT 1440p FB + YT Shorts
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
           FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
@@ -61,6 +61,7 @@ jobs:
         run: |
           export DENO_INSTALL="$HOME/.deno"
           export PATH="$DENO_INSTALL/bin:$PATH"
+          deno --version
           python -u movimoon-video-autoposter.py
 
       - name: Commit posted history
@@ -68,5 +69,5 @@ jobs:
           git config --global user.name 'MoviMoon Bot'
           git config --global user.email 'bot@movimoon.online'
           git add posted_history.json || echo "No history"
-          git diff --staged --quiet || git commit -m "Update history [skip ci]"
+          git diff --staged --quiet || git commit -m "Update history V37 FIXED-TRIM [skip ci]"
           git push || echo "No changes"
