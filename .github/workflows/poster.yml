@@ -30,8 +30,10 @@ jobs:
           export DENO_INSTALL="$HOME/.deno"
           export PATH="$DENO_INSTALL/bin:$PATH"
           $HOME/.deno/bin/deno --version
+          pip uninstall -y yt-dlp-ejs || true
           pip install -r requirements.txt
-          pip install -U "yt-dlp[default]" groq google-api-python-client google-auth google-auth-oauthlib google-auth-httplib2 bgutil-ytdlp-pot-provider
+          pip uninstall -y yt-dlp-ejs || true
+          pip install -U yt-dlp groq google-api-python-client google-auth google-auth-oauthlib google-auth-httplib2 bgutil-ytdlp-pot-provider
           yt-dlp --version
 
       - name: Create cookies.txt (Optional - POT only if empty)
