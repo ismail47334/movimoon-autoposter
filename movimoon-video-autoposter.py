@@ -173,28 +173,29 @@ def get_video_duration(video_path):
 
 
 
-def download_via_ytdlp_fixed(youtube_url, output="trailer.mp4"):
-    print(f"YT-DLP START 1440p QHD {youtube_url} - 2026 Ultimate 1440p Fix")
-    Path(output).unlink(missing_ok=True)
 
-    # Validate cookies
+def download_via_ytdlp_fixed(youtube_url, output="trailer.mp4"):
+    print(f"YT-DLP START 1440p QHD {youtube_url} - 2026 POT Fix")
+    Path(output).unlink(missing_ok=True)
     cookie_arg = ""
     has_cookies = False
     cp = Path("cookies.txt")
     if cp.exists():
         sz = cp.stat().st_size
-        txt = cp.read_text(encoding='utf-8', errors='ignore')[:1000]
+        try:
+            txt = cp.read_text(encoding='utf-8', errors='ignore')[:500]
+        except:
+            txt = ""
         if sz > 3000 and "# Netscape" in txt:
             cookie_arg = "--cookies cookies.txt"
             has_cookies = True
             print(f"Valid cookies {sz} bytes")
         else:
-            print(f"Invalid cookies {sz} bytes - ignoring, using POT only")
+            print(f"No valid cookies ({sz} bytes) - using POT only")
 
     os.environ["PATH"] = os.environ.get("PATH","") + ":/home/ubuntu/.deno/bin:/root/.deno/bin:/home/runner/.deno/bin"
     pot_args = '--extractor-args "youtube:player_client=android,web;po_token=android+web" --js-runtimes deno'
 
-    # 1440p FIRST - all strategies try 1440p
     base_strategies = [
         f'-f "bestvideo[height<=1440][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=1440]+bestaudio/best[height<=1440][ext=mp4]/best[height<=1440]" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings --retries 2 --fragment-retries 2',
         f'-f "bestvideo[height<=1440][height>=1080][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=1440]+bestaudio/best[height<=1440]" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings --retries 2 --fragment-retries 2',
@@ -202,7 +203,6 @@ def download_via_ytdlp_fixed(youtube_url, output="trailer.mp4"):
         f'-f "best[height<=1440]/best[height<=1080]/best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings --retries 2',
     ]
     strategies_with_pot = [f"{pot_args} {s}" for s in base_strategies]
-
     tries = []
     if has_cookies:
         tries.append((True, "with cookies + POT 1440p"))
@@ -217,15 +217,11 @@ def download_via_ytdlp_fixed(youtube_url, output="trailer.mp4"):
                 result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=150)
                 if Path(output).exists() and Path(output).stat().st_size > 80000:
                     size_mb = Path(output).stat().st_size/1024/1024
-                    try:
-                        probe = subprocess.run(f'ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of default=noprint_wrappers=1 "{output}"', shell=True, capture_output=True, text=True, timeout=10)
-                        print(f"YT-DLP SUCCESS {i} {mode} - {size_mb:.2f} MB - {probe.stdout.strip()} - 1440p")
-                    except:
-                        print(f"YT-DLP SUCCESS {i} {mode} - {size_mb:.2f} MB - 1440p")
+                    print(f"YT-DLP SUCCESS {i} {mode} - {size_mb:.2f} MB - 1440p")
                     return output
                 else:
-                    err = (result.stderr or "")[-400:]
-                    print(f"Strategy {i} {mode} failed - {err[-250:]}")
+                    err = (result.stderr or "")[-300:]
+                    print(f"Strategy {i} {mode} failed - {err[-200:]}")
                 Path(output).unlink(missing_ok=True)
             except Exception as e:
                 print(f"Strategy {i} err {e}")
@@ -826,6 +822,7 @@ def sanitize_drawtext(text):
     return text.strip() or "Movie"
 
 
+
 def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp4", bgm_path=None, trailer_duration=60, title_text="MoviMoon", m_type="movie"):
     try:
         if Path(output).exists():
@@ -845,58 +842,72 @@ def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp
                 font_path = "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
         print(f"Creating {dur}s video FINAL 1440p QHD 1440x2560 - Top: {label_top_safe} | {safe_title} | Type: {m_type}")
 
-        # 1440p FIX: Force final delivery to 1440x2560, preserve 1440p quality, crf 18, high profile
+        # Build filter_complex safely without nested quote hell
         if poster_path and Path(poster_path).exists():
-            cmd = (
-                f'ffmpeg -y -loop 1 -t {dur} -i "{poster_path}" '
-                f'-i "{trailer_path}" -i "{voice_path}" -stream_loop -1 -i "{bgm_path}" '
-                f'-filter_complex "[0:v]scale=1440:2560:force_original_aspect_ratio=increase,crop=1440:2560,gblur=sigma=25:steps=2,setsar=1,trim=duration={dur}[bg];'
-                f"[1:v]scale=1440:2560:force_original_aspect_ratio=increase,crop=1440:2560:flags=lanczos+accurate_rnd,setsar=1[fg];"
+            filter_complex = (
+                f"[0:v]scale=1440:2560:force_original_aspect_ratio=increase,crop=1440:2560,gblur=sigma=25:steps=2,setsar=1,trim=duration={dur}[bg];"
+                f"[1:v]scale=1440:2560:force_original_aspect_ratio=increase,crop=1440:2560:flags=lanczos,setsar=1[fg];"
                 f"[bg][fg]overlay=(W-w)/2:(H-h)/2:shortest=0,scale=1440:2560:flags=lanczos[base0];"
-                f"[base0]drawtext=text='{label_top_safe}':fontcolor=white:fontsize=50:box=1:boxcolor=black@0.70:boxborderw=13:borderw=2:bordercolor=black:"
-                f"x=(w-text_w)/2:y=90+4*sin(t*1.8):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[base1];"
-                f"[base1]drawtext=text='{safe_title}':fontcolor=white:fontsize=82:box=1:boxcolor=black@0.75:boxborderw=18:borderw=4:bordercolor=black:"
-                f"x=(w-text_w)/2:y=160+5*sin(t*1.8):shadowcolor=black:shadowx=5:shadowy=5:fontfile={font_path}[base_top];"
-                f"[base_top]drawtext=text='Watch on':fontcolor=white:fontsize=48:box=1:boxcolor=black@0.70:boxborderw=13:borderw=2:bordercolor=black:"
-                f"x=(w-text_w)/2:y=h-260-4*sin(t*2.2):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[base2];"
-                f"[base2]drawtext=text='movimoon.online':fontcolor=yellow:fontsize=70:box=1:boxcolor=black@0.75:boxborderw=18:borderw=4:bordercolor=black:"
-                f"x=(w-text_w)/2:y=h-190-5*sin(t*2.2):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[final_v];"
+                f"[base0]drawtext=text='{label_top_safe}':fontcolor=white:fontsize=50:box=1:boxcolor=black@0.70:boxborderw=13:borderw=2:bordercolor=black:x=(w-text_w)/2:y=90+4*sin(t*1.8):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[base1];"
+                f"[base1]drawtext=text='{safe_title}':fontcolor=white:fontsize=82:box=1:boxcolor=black@0.75:boxborderw=18:borderw=4:bordercolor=black:x=(w-text_w)/2:y=160+5*sin(t*1.8):shadowcolor=black:shadowx=5:shadowy=5:fontfile={font_path}[base_top];"
+                f"[base_top]drawtext=text='Watch on':fontcolor=white:fontsize=48:box=1:boxcolor=black@0.70:boxborderw=13:borderw=2:bordercolor=black:x=(w-text_w)/2:y=h-260-4*sin(t*2.2):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[base2];"
+                f"[base2]drawtext=text='movimoon.online':fontcolor=yellow:fontsize=70:box=1:boxcolor=black@0.75:boxborderw=18:borderw=4:bordercolor=black:x=(w-text_w)/2:y=h-190-5*sin(t*2.2):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[final_v];"
                 f"[1:a]volume=0.30[trailer_low];[3:a]volume=0.40[bg_vol];[2:a]asplit=2[voice_sc][voice_mix];"
                 f"[bg_vol][voice_sc]sidechaincompress=threshold=0.015:ratio=8:attack=20:release=400:makeup=1[ducked];"
-                f"[trailer_low][ducked][voice_mix]amix=inputs=3:duration=longest:dropout_transition=0:weights=0.30 0.35 1,volume=1.25,loudnorm=I=-16:TP=-1.5:LRA=8[a]" '
-                f'-map "[final_v]" -map "[a]" -c:v libx264 -profile:v high -level:v 5.1 -preset fast -crf 18 -pix_fmt yuv420p -vf "scale=1440:2560:flags=lanczos" -r 30 -movflags +faststart -c:a aac -b:a 192k -t {dur} "{output}"'
+                f"[trailer_low][ducked][voice_mix]amix=inputs=3:duration=longest:dropout_transition=0:weights=0.30 0.35 1,volume=1.25,loudnorm=I=-16:TP=-1.5:LRA=8[a]"
             )
+            cmd = [
+                "ffmpeg", "-y",
+                "-loop", "1", "-t", str(dur), "-i", poster_path,
+                "-i", trailer_path,
+                "-i", voice_path,
+                "-stream_loop", "-1", "-i", bgm_path,
+                "-filter_complex", filter_complex,
+                "-map", "[final_v]", "-map", "[a]",
+                "-c:v", "libx264", "-profile:v", "high", "-level:v", "5.1",
+                "-preset", "fast", "-crf", "18",
+                "-pix_fmt", "yuv420p", "-r", "30", "-movflags", "+faststart",
+                "-c:a", "aac", "-b:a", "192k",
+                "-t", str(dur), output
+            ]
         else:
-            cmd = (
-                f'ffmpeg -y -i "{trailer_path}" -i "{voice_path}" -stream_loop -1 -i "{bgm_path}" '
-                f'-filter_complex "[0:v]scale=1440:2560:force_original_aspect_ratio=increase,crop=1440:2560:flags=lanczos+accurate_rnd,gblur=sigma=25:steps=2[bg];'
-                f"[0:v]scale=1440:2560:force_original_aspect_ratio=increase,crop=1440:2560:flags=lanczos+accurate_rnd[fg];"
+            filter_complex = (
+                f"[0:v]scale=1440:2560:force_original_aspect_ratio=increase,crop=1440:2560,gblur=sigma=25:steps=2[bg];"
+                f"[0:v]scale=1440:2560:force_original_aspect_ratio=increase,crop=1440:2560:flags=lanczos[fg];"
                 f"[bg][fg]overlay=(W-w)/2:(H-h)/2,scale=1440:2560:flags=lanczos[base0];"
-                f"[base0]drawtext=text='{label_top_safe}':fontcolor=white:fontsize=50:box=1:boxcolor=black@0.70:boxborderw=13:borderw=2:bordercolor=black:"
-                f"x=(w-text_w)/2:y=90+4*sin(t*1.8):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[base1];"
-                f"[base1]drawtext=text='{safe_title}':fontcolor=white:fontsize=82:box=1:boxcolor=black@0.75:boxborderw=18:borderw=4:bordercolor=black:"
-                f"x=(w-text_w)/2:y=160+5*sin(t*1.8):shadowcolor=black:shadowx=5:shadowy=5:fontfile={font_path}[base_top];"
-                f"[base_top]drawtext=text='Watch on':fontcolor=white:fontsize=48:box=1:boxcolor=black@0.70:boxborderw=13:borderw=2:bordercolor=black:"
-                f"x=(w-text_w)/2:y=h-260-4*sin(t*2.2):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[base2];"
-                f"[base2]drawtext=text='movimoon.online':fontcolor=yellow:fontsize=70:box=1:boxcolor=black@0.75:boxborderw=18:borderw=4:bordercolor=black:"
-                f"x=(w-text_w)/2:y=h-190-5*sin(t*2.2):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[final_v];"
+                f"[base0]drawtext=text='{label_top_safe}':fontcolor=white:fontsize=50:box=1:boxcolor=black@0.70:boxborderw=13:borderw=2:bordercolor=black:x=(w-text_w)/2:y=90+4*sin(t*1.8):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[base1];"
+                f"[base1]drawtext=text='{safe_title}':fontcolor=white:fontsize=82:box=1:boxcolor=black@0.75:boxborderw=18:borderw=4:bordercolor=black:x=(w-text_w)/2:y=160+5*sin(t*1.8):shadowcolor=black:shadowx=5:shadowy=5:fontfile={font_path}[base_top];"
+                f"[base_top]drawtext=text='Watch on':fontcolor=white:fontsize=48:box=1:boxcolor=black@0.70:boxborderw=13:borderw=2:bordercolor=black:x=(w-text_w)/2:y=h-260-4*sin(t*2.2):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[base2];"
+                f"[base2]drawtext=text='movimoon.online':fontcolor=yellow:fontsize=70:box=1:boxcolor=black@0.75:boxborderw=18:borderw=4:bordercolor=black:x=(w-text_w)/2:y=h-190-5*sin(t*2.2):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[final_v];"
                 f"[0:a]volume=0.30[trailer_low];[2:a]volume=0.40[bg_vol];[1:a]asplit=2[voice_sc][voice_mix];"
                 f"[bg_vol][voice_sc]sidechaincompress=threshold=0.015:ratio=8:attack=20:release=400:makeup=1[ducked];"
-                f"[trailer_low][ducked][voice_mix]amix=inputs=3:duration=longest:dropout_transition=0:weights=0.30 0.35 1,volume=1.25,loudnorm=I=-16:TP=-1.5:LRA=8[a]" '
-                f'-map "[final_v]" -map "[a]" -c:v libx264 -profile:v high -level:v 5.1 -preset fast -crf 18 -pix_fmt yuv420p -r 30 -movflags +faststart -c:a aac -b:a 192k -t {dur} "{output}"'
+                f"[trailer_low][ducked][voice_mix]amix=inputs=3:duration=longest:dropout_transition=0:weights=0.30 0.35 1,volume=1.25,loudnorm=I=-16:TP=-1.5:LRA=8[a]"
             )
-        print(f"FFmpeg FINAL 1440p QHD 1440x2560 {dur}s - crf 18 high quality...")
-        result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=600)
+            cmd = [
+                "ffmpeg", "-y",
+                "-i", trailer_path,
+                "-i", voice_path,
+                "-stream_loop", "-1", "-i", bgm_path,
+                "-filter_complex", filter_complex,
+                "-map", "[final_v]", "-map", "[a]",
+                "-c:v", "libx264", "-profile:v", "high", "-level:v", "5.1",
+                "-preset", "fast", "-crf", "18",
+                "-pix_fmt", "yuv420p", "-r", "30", "-movflags", "+faststart",
+                "-c:a", "aac", "-b:a", "192k",
+                "-t", str(dur), output
+            ]
+
+        print(f"FFmpeg FINAL 1440p QHD 1440x2560 {dur}s - crf 18...")
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
         if Path(output).exists() and Path(output).stat().st_size > 50000:
-            # Verify 1440p
-            probe = subprocess.run(f'ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of default=noprint_wrappers=1 "{output}"', shell=True, capture_output=True, text=True, timeout=10)
-            print(f"Final OK 1440p QHD {Path(output).stat().st_size/1024/1024:.2f} MB - {probe.stdout.strip()} - 1440x2560")
+            print(f"Final OK 1440p QHD {Path(output).stat().st_size/1024/1024:.2f} MB - 1440x2560")
             return output
         print(f"FFmpeg err {result.stderr[-2000:]}")
         return None
     except Exception as e:
         print(f"1440p Video Error {e}")
-        import traceback; traceback.print_exc()
+        import traceback
+        traceback.print_exc()
         return None
 
     except Exception as e:
