@@ -173,69 +173,57 @@ def get_video_duration(video_path):
 
 
 
-
-
 def download_via_ytdlp_fixed(youtube_url, output="trailer.mp4"):
-    print(f"YT-DLP START 1440p QHD {youtube_url} - 2026 POT Fix NO EJS")
+    print(f"YT-DLP START 1440p MAX QHD {youtube_url}")
     Path(output).unlink(missing_ok=True)
-    
-    # Check cookies - optional
     cookie_arg = ""
-    cp = Path("cookies.txt")
-    if cp.exists() and cp.stat().st_size > 3000:
-        try:
-            txt = cp.read_text(encoding='utf-8', errors='ignore')
-            if "# Netscape" in txt:
-                cookie_arg = "--cookies cookies.txt"
-                print(f"Using cookies {cp.stat().st_size} bytes")
-        except:
-            pass
-    
-    if not cookie_arg:
-        print("No cookies - using POT + Android client (Recommended)")
-
-    os.environ["PATH"] = os.environ.get("PATH","") + ":/home/ubuntu/.deno/bin:/root/.deno/bin:/home/runner/.deno/bin"
-    
-    # 2026 Working strategies - android client bypasses bot check, no ejs needed
-    strategies = [
-        f'{cookie_arg} --extractor-args "youtube:player_client=android" -f "bv*[height<=1440][ext=mp4]+ba[ext=m4a]/b[height<=1440] / bv*+ba/b" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings --retries 5 --fragment-retries 5 --extractor-retries 3',
-        f'{cookie_arg} --extractor-args "youtube:player_client=android,web" --js-runtimes deno -f "bv*[height<=1440]+ba/b[height<=1440]/b" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --retries 5',
-        f'{cookie_arg} -f "best[height<=1080]/best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --retries 5',
-        f'{cookie_arg} --extractor-args "youtube:player_client=ios" -f "best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --retries 5',
-        f'--extractor-args "youtube:player_client=android" --no-cookies -f "best" -o "{output}" "{youtube_url}" --no-playlist',
+    has_cookies = False
+    if Path("cookies.txt").exists() and Path("cookies.txt").stat().st_size > 100:
+        cookie_arg = "--cookies cookies.txt"
+        has_cookies = True
+        print(f"Using cookies.txt ({Path('cookies.txt').stat().st_size} bytes)")
+    else:
+        print("No cookies.txt, trying without")
+    base_strategies = [
+        f'-f "bestvideo[height<=1440][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=1440]+bestaudio/best[height<=1440][ext=mp4]/best[height<=1440]" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings -q --retries 1 --fragment-retries 1',
+        f'-f "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best[height<=1080]" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings -q --retries 1 --fragment-retries 1',
+        f'-f "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings -q --retries 1 --fragment-retries 1',
+        f'--extractor-args "youtube:player_client=android" -f "best[height<=1440]/best[height<=1080]/best[height<=720]/best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings -q --retries 1',
+        f'-f "best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings -q --retries 1',
     ]
-    
-    for i, cmd_base in enumerate(strategies, 1):
-        cmd = f'yt-dlp {cmd_base}'.strip()
-        try:
-            print(f"Trying strategy {i}...")
-            # Clean double spaces from empty cookie_arg
-            cmd = cmd.replace("  ", " ")
-            result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=180)
-            if Path(output).exists() and Path(output).stat().st_size > 80000:
-                size_mb = Path(output).stat().st_size/1024/1024
-                print(f"YT-DLP SUCCESS {i} - {size_mb:.2f} MB")
-                return output
-            else:
-                err = (result.stderr or result.stdout or "")[-800:]
-                print(f"Strategy {i} failed: {err[-400:]}")
-            Path(output).unlink(missing_ok=True)
-        except Exception as e:
-            print(f"Strategy {i} exception {e}")
-            continue
-    
-    print("ALL YT-DLP FAILED - trying fallback with bgutil")
-    # Last fallback - try with bgutil pot provider directly
-    try:
-        cmd = f'yt-dlp --extractor-args "youtubepot-bgutil-audio:cache,webpage:cache" -f "best[height<=1080]/best" -o "{output}" "{youtube_url}" --no-playlist'
-        subprocess.run(cmd, shell=True, timeout=120)
-        if Path(output).exists():
-            return output
-    except:
-        pass
+    for use_cookies in ([True, False] if has_cookies else [False]):
+        c_arg = cookie_arg if use_cookies else ""
+        mode = "with cookies" if use_cookies else "without cookies"
+        for i, base in enumerate(base_strategies, 1):
+            cmd = f'yt-dlp {c_arg} {base}'
+            try:
+                res_label = ["1440p(2K)", "1080p", "720p", "android-best", "best"][i-1]
+                print(f"Trying 1440p MAX strategy {i} {res_label} {mode}...")
+                result = __import__('subprocess').run(cmd, shell=True, capture_output=True, text=True, timeout=90)
+                if Path(output).exists() and Path(output).stat().st_size > 50000:
+                    size_mb = Path(output).stat().st_size/1024/1024
+                    try:
+                        probe = __import__('subprocess').run(f'ffprobe -v error -select_streams v:0 -show_entries stream=height -of default=noprint_wrappers=1:nokey=1 "{output}"', shell=True, capture_output=True, text=True, timeout=10)
+                        h = probe.stdout.strip()
+                        print(f"YT-DLP SUCCESS {i} {res_label} {mode} - {size_mb:.2f} MB - Height: {h}p - 1440p MAX")
+                    except:
+                        print(f"YT-DLP SUCCESS {i} {res_label} {mode} - {size_mb:.2f} MB - 1440p MAX")
+                    return output
+                else:
+                    err = (result.stderr or "") + (result.stdout or "")
+                    print(f"Strategy {i} {res_label} {mode} failed - {err[-300:]}")
+                Path(output).unlink(missing_ok=True)
+            except __import__('subprocess').TimeoutExpired:
+                print(f"Strategy {i} {mode} TIMEOUT 90s")
+                Path(output).unlink(missing_ok=True)
+                continue
+            except Exception as e:
+                print(f"Strategy {i} {mode} err {e}")
+                continue
+        if use_cookies:
+            print("All with cookies failed, retry WITHOUT cookies - V37")
+    print("ALL YT-DLP FAILED")
     return None
-
-
 
 def download_trailer(youtube_url, output="trailer.mp4"):
     return download_via_ytdlp_fixed(youtube_url, output)
@@ -387,7 +375,7 @@ def smart_trim_trailer_to_60s(input_path, output_path="trailer_60s.mp4"):
         for i, (s, e) in enumerate(cuts):
             seg_path = f"seg_{i}.mp4"
             # Use -ss accurate seek + re-encode for clean cut
-            cmd_seg = f'ffmpeg -y -ss {s} -to {e} -i "{input_path}" -c:v libx264 -preset fast -crf 18 -c:a aac -r 30 "{seg_path}"'
+            cmd_seg = f'ffmpeg -y -ss {s} -to {e} -i "{input_path}" -c:v libx264 -preset veryfast -crf 23 -c:a aac -r 30 "{seg_path}"'
             result = subprocess.run(cmd_seg, shell=True, capture_output=True, text=True, timeout=90)
             if Path(seg_path).exists() and Path(seg_path).stat().st_size > 10000:
                 seg_files.append(seg_path)
@@ -401,7 +389,7 @@ def smart_trim_trailer_to_60s(input_path, output_path="trailer_60s.mp4"):
                 for sf in seg_files:
                     f.write(f"file '{sf}'"+"\n")
             
-            cmd_concat = f'ffmpeg -y -f concat -safe 0 -i concat_v37.txt -c:v libx264 -preset fast -crf 18 -c:a aac "{output_path}"'
+            cmd_concat = f'ffmpeg -y -f concat -safe 0 -i concat_v37.txt -c:v libx264 -preset veryfast -crf 23 -c:a aac "{output_path}"'
             result_concat = subprocess.run(cmd_concat, shell=True, capture_output=True, text=True, timeout=120)
             
             # Cleanup seg files
@@ -426,7 +414,7 @@ def smart_trim_trailer_to_60s(input_path, output_path="trailer_60s.mp4"):
         
         print(f"Segment method had only {success_count} success, trying fallback middle 60s")
         # Fallback: simple middle 60s starting at 2s
-        cmd2 = f'ffmpeg -y -ss 2 -i "{input_path}" -t 60 -c:v libx264 -preset fast -crf 18 -c:a aac "{output_path}"'
+        cmd2 = f'ffmpeg -y -ss 2 -i "{input_path}" -t 60 -c:v libx264 -preset veryfast -crf 23 -c:a aac "{output_path}"'
         subprocess.run(cmd2, shell=True, capture_output=True, text=True, timeout=90)
         if Path(output_path).exists():
             return output_path
@@ -829,7 +817,6 @@ def sanitize_drawtext(text):
     return text.strip() or "Movie"
 
 
-
 def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp4", bgm_path=None, trailer_duration=60, title_text="MoviMoon", m_type="movie"):
     try:
         if Path(output).exists():
@@ -847,76 +834,53 @@ def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp
             font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
             if not Path(font_path).exists():
                 font_path = "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
-        print(f"Creating {dur}s video FINAL 1440p QHD 1440x2560 - Top: {label_top_safe} | {safe_title} | Type: {m_type}")
-
-        # Build filter_complex safely without nested quote hell
+        print(f"Creating {dur}s video FINAL V37 FIXED-TRIM + V39 MASTER PROMPT 1440p SMART-TRIM ZOOM 65% 2K - Top: {label_top_safe} | {safe_title} | Type: {m_type}")
         if poster_path and Path(poster_path).exists():
-            filter_complex = (
-                f"[0:v]scale=1440:2560:force_original_aspect_ratio=increase,crop=1440:2560,gblur=sigma=25:steps=2,setsar=1,trim=duration={dur}[bg];"
-                f"[1:v]scale=1440:2560:force_original_aspect_ratio=increase,crop=1440:2560:flags=lanczos,setsar=1[fg];"
+            cmd = (
+                f"ffmpeg -y -loop 1 -t {dur} -i \"{poster_path}\" "
+                f"-i \"{trailer_path}\" -i \"{voice_path}\" -stream_loop -1 -i \"{bgm_path}\" "
+                f"-filter_complex \"[0:v]scale=1440:2560:force_original_aspect_ratio=increase,crop=1440:2560,gblur=sigma=25:steps=2,setsar=1,trim=duration={dur}[bg];"
+                f"[1:v]scale=1440:1664:force_original_aspect_ratio=increase,crop=1440:1664,setsar=1[fg];"
                 f"[bg][fg]overlay=(W-w)/2:(H-h)/2:shortest=0,scale=1440:2560:flags=lanczos[base0];"
-                f"[base0]drawtext=text='{label_top_safe}':fontcolor=white:fontsize=50:box=1:boxcolor=black@0.70:boxborderw=13:borderw=2:bordercolor=black:x=(w-text_w)/2:y=90+4*sin(t*1.8):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[base1];"
-                f"[base1]drawtext=text='{safe_title}':fontcolor=white:fontsize=82:box=1:boxcolor=black@0.75:boxborderw=18:borderw=4:bordercolor=black:x=(w-text_w)/2:y=160+5*sin(t*1.8):shadowcolor=black:shadowx=5:shadowy=5:fontfile={font_path}[base_top];"
-                f"[base_top]drawtext=text='Watch on':fontcolor=white:fontsize=48:box=1:boxcolor=black@0.70:boxborderw=13:borderw=2:bordercolor=black:x=(w-text_w)/2:y=h-260-4*sin(t*2.2):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[base2];"
-                f"[base2]drawtext=text='movimoon.online':fontcolor=yellow:fontsize=70:box=1:boxcolor=black@0.75:boxborderw=18:borderw=4:bordercolor=black:x=(w-text_w)/2:y=h-190-5*sin(t*2.2):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[final_v];"
+                f"[base0]drawtext=text='{label_top_safe}':fontcolor=white:fontsize=50:box=1:boxcolor=black@0.70:boxborderw=13:borderw=2:bordercolor=black:"
+                f"x=(w-text_w)/2:y=90+4*sin(t*1.8):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[base1];"
+                f"[base1]drawtext=text='{safe_title}':fontcolor=white:fontsize=82:box=1:boxcolor=black@0.75:boxborderw=18:borderw=4:bordercolor=black:"
+                f"x=(w-text_w)/2:y=160+5*sin(t*1.8):shadowcolor=black:shadowx=5:shadowy=5:fontfile={font_path}[base_top];"
+                f"[base_top]drawtext=text='Watch on':fontcolor=white:fontsize=48:box=1:boxcolor=black@0.70:boxborderw=13:borderw=2:bordercolor=black:"
+                f"x=(w-text_w)/2:y=h-260-4*sin(t*2.2):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[base2];"
+                f"[base2]drawtext=text='movimoon.online':fontcolor=yellow:fontsize=70:box=1:boxcolor=black@0.75:boxborderw=18:borderw=4:bordercolor=black:"
+                f"x=(w-text_w)/2:y=h-190-5*sin(t*2.2):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[final_v];"
                 f"[1:a]volume=0.30[trailer_low];[3:a]volume=0.40[bg_vol];[2:a]asplit=2[voice_sc][voice_mix];"
                 f"[bg_vol][voice_sc]sidechaincompress=threshold=0.015:ratio=8:attack=20:release=400:makeup=1[ducked];"
-                f"[trailer_low][ducked][voice_mix]amix=inputs=3:duration=longest:dropout_transition=0:weights=0.30 0.35 1,volume=1.25,loudnorm=I=-16:TP=-1.5:LRA=8[a]"
+                f"[trailer_low][ducked][voice_mix]amix=inputs=3:duration=longest:dropout_transition=0:weights=0.30 0.35 1,volume=1.25,loudnorm=I=-16:TP=-1.5:LRA=8[a]\" "
+                f"-map \"[final_v]\" -map \"[a]\" -c:v libx264 -profile:v high -level:v 4.2 -preset fast -crf 20 -pix_fmt yuv420p -r 30 -movflags +faststart -c:a aac -b:a 192k -t {dur} \"{output}\""
             )
-            cmd = [
-                "ffmpeg", "-y",
-                "-loop", "1", "-t", str(dur), "-i", poster_path,
-                "-i", trailer_path,
-                "-i", voice_path,
-                "-stream_loop", "-1", "-i", bgm_path,
-                "-filter_complex", filter_complex,
-                "-map", "[final_v]", "-map", "[a]",
-                "-c:v", "libx264", "-profile:v", "high", "-level:v", "5.1",
-                "-preset", "fast", "-crf", "18",
-                "-pix_fmt", "yuv420p", "-r", "30", "-movflags", "+faststart",
-                "-c:a", "aac", "-b:a", "192k",
-                "-t", str(dur), output
-            ]
         else:
-            filter_complex = (
-                f"[0:v]scale=1440:2560:force_original_aspect_ratio=increase,crop=1440:2560,gblur=sigma=25:steps=2[bg];"
-                f"[0:v]scale=1440:2560:force_original_aspect_ratio=increase,crop=1440:2560:flags=lanczos[fg];"
+            cmd = (
+                f"ffmpeg -y -i \"{trailer_path}\" -i \"{voice_path}\" -stream_loop -1 -i \"{bgm_path}\" "
+                f"-filter_complex \"[0:v]scale=1440:2560:force_original_aspect_ratio=increase,crop=1440:2560,gblur=sigma=25:steps=2[bg];"
+                f"[0:v]scale=1440:1664:force_original_aspect_ratio=increase,crop=1440:1664[fg];"
                 f"[bg][fg]overlay=(W-w)/2:(H-h)/2,scale=1440:2560:flags=lanczos[base0];"
-                f"[base0]drawtext=text='{label_top_safe}':fontcolor=white:fontsize=50:box=1:boxcolor=black@0.70:boxborderw=13:borderw=2:bordercolor=black:x=(w-text_w)/2:y=90+4*sin(t*1.8):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[base1];"
-                f"[base1]drawtext=text='{safe_title}':fontcolor=white:fontsize=82:box=1:boxcolor=black@0.75:boxborderw=18:borderw=4:bordercolor=black:x=(w-text_w)/2:y=160+5*sin(t*1.8):shadowcolor=black:shadowx=5:shadowy=5:fontfile={font_path}[base_top];"
-                f"[base_top]drawtext=text='Watch on':fontcolor=white:fontsize=48:box=1:boxcolor=black@0.70:boxborderw=13:borderw=2:bordercolor=black:x=(w-text_w)/2:y=h-260-4*sin(t*2.2):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[base2];"
-                f"[base2]drawtext=text='movimoon.online':fontcolor=yellow:fontsize=70:box=1:boxcolor=black@0.75:boxborderw=18:borderw=4:bordercolor=black:x=(w-text_w)/2:y=h-190-5*sin(t*2.2):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[final_v];"
+                f"[base0]drawtext=text='{label_top_safe}':fontcolor=white:fontsize=50:box=1:boxcolor=black@0.70:boxborderw=13:borderw=2:bordercolor=black:"
+                f"x=(w-text_w)/2:y=90+4*sin(t*1.8):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[base1];"
+                f"[base1]drawtext=text='{safe_title}':fontcolor=white:fontsize=82:box=1:boxcolor=black@0.75:boxborderw=18:borderw=4:bordercolor=black:"
+                f"x=(w-text_w)/2:y=160+5*sin(t*1.8):shadowcolor=black:shadowx=5:shadowy=5:fontfile={font_path}[base_top];"
+                f"[base_top]drawtext=text='Watch on':fontcolor=white:fontsize=48:box=1:boxcolor=black@0.70:boxborderw=13:borderw=2:bordercolor=black:"
+                f"x=(w-text_w)/2:y=h-260-4*sin(t*2.2):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[base2];"
+                f"[base2]drawtext=text='movimoon.online':fontcolor=yellow:fontsize=70:box=1:boxcolor=black@0.75:boxborderw=18:borderw=4:bordercolor=black:"
+                f"x=(w-text_w)/2:y=h-190-5*sin(t*2.2):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[final_v];"
                 f"[0:a]volume=0.30[trailer_low];[2:a]volume=0.40[bg_vol];[1:a]asplit=2[voice_sc][voice_mix];"
                 f"[bg_vol][voice_sc]sidechaincompress=threshold=0.015:ratio=8:attack=20:release=400:makeup=1[ducked];"
-                f"[trailer_low][ducked][voice_mix]amix=inputs=3:duration=longest:dropout_transition=0:weights=0.30 0.35 1,volume=1.25,loudnorm=I=-16:TP=-1.5:LRA=8[a]"
+                f"[trailer_low][ducked][voice_mix]amix=inputs=3:duration=longest:dropout_transition=0:weights=0.30 0.35 1,volume=1.25,loudnorm=I=-16:TP=-1.5:LRA=8[a]\" "
+                f"-map \"[final_v]\" -map \"[a]\" -c:v libx264 -profile:v high -level:v 4.2 -preset fast -crf 20 -pix_fmt yuv420p -r 30 -movflags +faststart -c:a aac -b:a 192k -t {dur} \"{output}\""
             )
-            cmd = [
-                "ffmpeg", "-y",
-                "-i", trailer_path,
-                "-i", voice_path,
-                "-stream_loop", "-1", "-i", bgm_path,
-                "-filter_complex", filter_complex,
-                "-map", "[final_v]", "-map", "[a]",
-                "-c:v", "libx264", "-profile:v", "high", "-level:v", "5.1",
-                "-preset", "fast", "-crf", "18",
-                "-pix_fmt", "yuv420p", "-r", "30", "-movflags", "+faststart",
-                "-c:a", "aac", "-b:a", "192k",
-                "-t", str(dur), output
-            ]
-
-        print(f"FFmpeg FINAL 1440p QHD 1440x2560 {dur}s - crf 18...")
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+        print(f"FFmpeg FINAL V37 FIXED-TRIM + V39 MASTER PROMPT 1440p SMART-TRIM {dur}s...")
+        result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=600)
         if Path(output).exists() and Path(output).stat().st_size > 50000:
-            print(f"Final OK 1440p QHD {Path(output).stat().st_size/1024/1024:.2f} MB - 1440x2560")
+            print(f"Final OK V37 SMART-TRIM 1440p {Path(output).stat().st_size/1024/1024:.2f} MB - ZOOM 65% + 2-LINE TITLE + DYNAMIC WORDS")
             return output
-        print(f"FFmpeg err {result.stderr[-2000:]}")
+        print(f"FFmpeg err {result.stderr[-1500:]}")
         return None
-    except Exception as e:
-        print(f"1440p Video Error {e}")
-        import traceback
-        traceback.print_exc()
-        return None
-
     except Exception as e:
         print(f"V37 Error {e}")
         import traceback; traceback.print_exc()
