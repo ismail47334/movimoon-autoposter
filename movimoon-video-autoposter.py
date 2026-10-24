@@ -174,60 +174,67 @@ def get_video_duration(video_path):
 
 
 
+
 def download_via_ytdlp_fixed(youtube_url, output="trailer.mp4"):
-    print(f"YT-DLP START 1440p QHD {youtube_url} - 2026 POT Fix")
+    print(f"YT-DLP START 1440p QHD {youtube_url} - 2026 POT Fix NO EJS")
     Path(output).unlink(missing_ok=True)
+    
+    # Check cookies - optional
     cookie_arg = ""
-    has_cookies = False
     cp = Path("cookies.txt")
-    if cp.exists():
-        sz = cp.stat().st_size
+    if cp.exists() and cp.stat().st_size > 3000:
         try:
-            txt = cp.read_text(encoding='utf-8', errors='ignore')[:500]
+            txt = cp.read_text(encoding='utf-8', errors='ignore')
+            if "# Netscape" in txt:
+                cookie_arg = "--cookies cookies.txt"
+                print(f"Using cookies {cp.stat().st_size} bytes")
         except:
-            txt = ""
-        if sz > 3000 and "# Netscape" in txt:
-            cookie_arg = "--cookies cookies.txt"
-            has_cookies = True
-            print(f"Valid cookies {sz} bytes")
-        else:
-            print(f"No valid cookies ({sz} bytes) - using POT only")
+            pass
+    
+    if not cookie_arg:
+        print("No cookies - using POT + Android client (Recommended)")
 
     os.environ["PATH"] = os.environ.get("PATH","") + ":/home/ubuntu/.deno/bin:/root/.deno/bin:/home/runner/.deno/bin"
-    pot_args = '--extractor-args "youtube:player_client=android,web;po_token=android+web" --js-runtimes deno'
-
-    base_strategies = [
-        f'-f "bestvideo[height<=1440][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=1440]+bestaudio/best[height<=1440][ext=mp4]/best[height<=1440]" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings --retries 2 --fragment-retries 2',
-        f'-f "bestvideo[height<=1440][height>=1080][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=1440]+bestaudio/best[height<=1440]" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings --retries 2 --fragment-retries 2',
-        f'--extractor-args "youtube:player_client=android" -f "bestvideo[height<=1440]+bestaudio/best[height<=1440]/best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings --retries 2',
-        f'-f "best[height<=1440]/best[height<=1080]/best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings --retries 2',
+    
+    # 2026 Working strategies - android client bypasses bot check, no ejs needed
+    strategies = [
+        f'{cookie_arg} --extractor-args "youtube:player_client=android" -f "bv*[height<=1440][ext=mp4]+ba[ext=m4a]/b[height<=1440] / bv*+ba/b" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings --retries 5 --fragment-retries 5 --extractor-retries 3',
+        f'{cookie_arg} --extractor-args "youtube:player_client=android,web" --js-runtimes deno -f "bv*[height<=1440]+ba/b[height<=1440]/b" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --retries 5',
+        f'{cookie_arg} -f "best[height<=1080]/best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --retries 5',
+        f'{cookie_arg} --extractor-args "youtube:player_client=ios" -f "best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --retries 5',
+        f'--extractor-args "youtube:player_client=android" --no-cookies -f "best" -o "{output}" "{youtube_url}" --no-playlist',
     ]
-    strategies_with_pot = [f"{pot_args} {s}" for s in base_strategies]
-    tries = []
-    if has_cookies:
-        tries.append((True, "with cookies + POT 1440p"))
-    tries.append((False, "POT only 1440p"))
-
-    for use_cookies, mode in tries:
-        c_arg = cookie_arg if use_cookies else ""
-        for i, base_cmd in enumerate(strategies_with_pot, 1):
-            cmd = f'yt-dlp {c_arg} {base_cmd}'
-            try:
-                print(f"Trying 1440p strategy {i} {mode}...")
-                result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=150)
-                if Path(output).exists() and Path(output).stat().st_size > 80000:
-                    size_mb = Path(output).stat().st_size/1024/1024
-                    print(f"YT-DLP SUCCESS {i} {mode} - {size_mb:.2f} MB - 1440p")
-                    return output
-                else:
-                    err = (result.stderr or "")[-300:]
-                    print(f"Strategy {i} {mode} failed - {err[-200:]}")
-                Path(output).unlink(missing_ok=True)
-            except Exception as e:
-                print(f"Strategy {i} err {e}")
-                continue
-    print("ALL YT-DLP 1440p FAILED")
+    
+    for i, cmd_base in enumerate(strategies, 1):
+        cmd = f'yt-dlp {cmd_base}'.strip()
+        try:
+            print(f"Trying strategy {i}...")
+            # Clean double spaces from empty cookie_arg
+            cmd = cmd.replace("  ", " ")
+            result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=180)
+            if Path(output).exists() and Path(output).stat().st_size > 80000:
+                size_mb = Path(output).stat().st_size/1024/1024
+                print(f"YT-DLP SUCCESS {i} - {size_mb:.2f} MB")
+                return output
+            else:
+                err = (result.stderr or result.stdout or "")[-800:]
+                print(f"Strategy {i} failed: {err[-400:]}")
+            Path(output).unlink(missing_ok=True)
+        except Exception as e:
+            print(f"Strategy {i} exception {e}")
+            continue
+    
+    print("ALL YT-DLP FAILED - trying fallback with bgutil")
+    # Last fallback - try with bgutil pot provider directly
+    try:
+        cmd = f'yt-dlp --extractor-args "youtubepot-bgutil-audio:cache,webpage:cache" -f "best[height<=1080]/best" -o "{output}" "{youtube_url}" --no-playlist'
+        subprocess.run(cmd, shell=True, timeout=120)
+        if Path(output).exists():
+            return output
+    except:
+        pass
     return None
+
 
 
 def download_trailer(youtube_url, output="trailer.mp4"):
