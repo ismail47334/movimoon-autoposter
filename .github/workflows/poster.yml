@@ -1,26 +1,26 @@
-name: MoviMoon Video AutoPoster - FINAL V37 FIXED-TRIM + MASTER PROMPT 1440p FB + YT + PAGE ONLY SUCCESS
+name: MoviMoon Video AutoPoster - FINAL 1440p QHD FIXED
 
 on:
  schedule:
-  - cron: '0 4 * * *'
-  - cron: '0 9 * * *'
-  - cron: '0 14 * * *'
+    - cron: '0 4 * * *'
+    - cron: '0 9 * * *'
+    - cron: '0 14 * * *'
  workflow_dispatch:
 
 jobs:
  post-videos:
   runs-on: ubuntu-latest
   steps:
-   - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
     with:
      token: ${{ secrets.GITHUB_TOKEN }}
 
-   - name: Set up Python
+      - name: Set up Python
     uses: actions/setup-python@v5
     with:
      python-version: '3.11'
 
-   - name: Install FFmpeg + Deno + yt-dlp + Fonts + Google APIs
+      - name: Install FFmpeg + Deno + yt-dlp + Fonts + Google APIs
     run: |
      sudo apt-get update
      sudo apt-get install -y ffmpeg fonts-dejavu-core fonts-noto-core
@@ -31,22 +31,28 @@ jobs:
      export PATH="$DENO_INSTALL/bin:$PATH"
      $HOME/.deno/bin/deno --version
      pip install -r requirements.txt
-     pip install -U "yt-dlp[default]" groq google-api-python-client google-auth google-auth-oauthlib google-auth-httplib2
+     pip install -U "yt-dlp[default]" groq google-api-python-client google-auth google-auth-oauthlib google-auth-httplib2 bgutil-ytdlp-pot-provider
      yt-dlp --version
 
-   - name: Create cookies.txt
+      - name: Create cookies.txt (Optional - POT only if empty)
     env:
      YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
     run: |
      if [ -n "$YOUTUBE_COOKIES" ]; then
       printf "%s" "$YOUTUBE_COOKIES" > cookies.txt
       echo "cookies.txt: $(wc -c < cookies.txt) bytes"
+      if grep -q "Netscape" cookies.txt; then
+        echo "Cookies format OK"
+      else
+        echo "WARNING: Invalid format - will use POT only"
+        rm cookies.txt
+      fi
      else
-      echo "No YOUTUBE_COOKIES"
+      echo "No YOUTUBE_COOKIES - Using POT only mode (Recommended for GitHub)"
      fi
      ls -lh
 
-   - name: Run V37 FIXED-TRIM + MASTER PROMPT 1440p FB + YT Shorts
+      - name: Run FINAL 1440p QHD
     env:
      TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
      FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
@@ -64,10 +70,10 @@ jobs:
      deno --version
      python -u movimoon-video-autoposter.py
 
-   - name: Commit posted history
+      - name: Commit posted history
     run: |
      git config --global user.name 'MoviMoon Bot'
      git config --global user.email 'bot@movimoon.online'
      git add posted_history.json || echo "No history"
-     git diff --staged --quiet || git commit -m "Update history V37 FIXED-TRIM [skip ci]"
+     git diff --staged --quiet || git commit -m "Update history 1440p FIXED [skip ci]"
      git push || echo "No changes"
