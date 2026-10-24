@@ -1,4 +1,4 @@
-name: MoviMoon Video AutoPoster - FINAL 1440p QHD FIXED
+name: MoviMoon Video AutoPoster - FINAL V37 FIXED-TRIM + MASTER PROMPT 1440p FB + YT + PAGE ONLY SUCCESS
 
 on:
   schedule:
@@ -30,31 +30,23 @@ jobs:
           export DENO_INSTALL="$HOME/.deno"
           export PATH="$DENO_INSTALL/bin:$PATH"
           $HOME/.deno/bin/deno --version
-          pip uninstall -y yt-dlp-ejs || true
           pip install -r requirements.txt
-          pip uninstall -y yt-dlp-ejs || true
-          pip install -U yt-dlp groq google-api-python-client google-auth google-auth-oauthlib google-auth-httplib2 bgutil-ytdlp-pot-provider
+          pip install -U "yt-dlp[default]" yt-dlp-ejs groq google-api-python-client google-auth google-auth-oauthlib google-auth-httplib2
           yt-dlp --version
 
-      - name: Create cookies.txt (Optional - POT only if empty)
+      - name: Create cookies.txt
         env:
           YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
         run: |
           if [ -n "$YOUTUBE_COOKIES" ]; then
             printf "%s" "$YOUTUBE_COOKIES" > cookies.txt
             echo "cookies.txt: $(wc -c < cookies.txt) bytes"
-            if grep -q "Netscape" cookies.txt; then
-              echo "Cookies format OK"
-            else
-              echo "WARNING: Invalid format - will use POT only"
-              rm cookies.txt
-            fi
           else
-            echo "No YOUTUBE_COOKIES - Using POT only mode (Recommended)"
+            echo "No YOUTUBE_COOKIES"
           fi
           ls -lh
 
-      - name: Run FINAL 1440p QHD
+      - name: Run V37 FIXED-TRIM + MASTER PROMPT 1440p FB + YT Shorts
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
           FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
@@ -77,5 +69,5 @@ jobs:
           git config --global user.name 'MoviMoon Bot'
           git config --global user.email 'bot@movimoon.online'
           git add posted_history.json || echo "No history"
-          git diff --staged --quiet || git commit -m "Update history 1440p FIXED [skip ci]"
+          git diff --staged --quiet || git commit -m "Update history V37 FIXED-TRIM [skip ci]"
           git push || echo "No changes"
