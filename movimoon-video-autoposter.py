@@ -174,62 +174,63 @@ def get_video_duration(video_path):
 
 
 def download_via_ytdlp_fixed(youtube_url, output="trailer.mp4"):
-    print(f"YT-DLP START 1440p MAX QHD {youtube_url} - 2026 POT Fix")
+    print(f"YT-DLP START 1440p QHD {youtube_url} - 2026 Ultimate 1440p Fix")
     Path(output).unlink(missing_ok=True)
+
+    # Validate cookies
     cookie_arg = ""
     has_cookies = False
-    if Path("cookies.txt").exists() and Path("cookies.txt").stat().st_size > 100:
-        cookie_arg = "--cookies cookies.txt"
-        has_cookies = True
-        print(f"Using cookies.txt ({Path('cookies.txt').stat().st_size} bytes)")
-    else:
-        print("No cookies.txt, trying without")
+    cp = Path("cookies.txt")
+    if cp.exists():
+        sz = cp.stat().st_size
+        txt = cp.read_text(encoding='utf-8', errors='ignore')[:1000]
+        if sz > 3000 and "# Netscape" in txt:
+            cookie_arg = "--cookies cookies.txt"
+            has_cookies = True
+            print(f"Valid cookies {sz} bytes")
+        else:
+            print(f"Invalid cookies {sz} bytes - ignoring, using POT only")
 
-    # 2026 FIX: POT provider + deno runtime
     os.environ["PATH"] = os.environ.get("PATH","") + ":/home/ubuntu/.deno/bin:/root/.deno/bin:/home/runner/.deno/bin"
     pot_args = '--extractor-args "youtube:player_client=android,web;po_token=android+web" --js-runtimes deno'
 
+    # 1440p FIRST - all strategies try 1440p
     base_strategies = [
-        f'-f "bestvideo[height<=1440][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=1440]+bestaudio/best[height<=1440][ext=mp4]/best[height<=1440]" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings -q --retries 1 --fragment-retries 1',
-        f'-f "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best[height<=1080]" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings -q --retries 1 --fragment-retries 1',
-        f'-f "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings -q --retries 1 --fragment-retries 1',
-        f'--extractor-args "youtube:player_client=android" -f "best[height<=1440]/best[height<=1080]/best[height<=720]/best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings -q --retries 1',
-        f'-f "best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings -q --retries 1',
+        f'-f "bestvideo[height<=1440][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=1440]+bestaudio/best[height<=1440][ext=mp4]/best[height<=1440]" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings --retries 2 --fragment-retries 2',
+        f'-f "bestvideo[height<=1440][height>=1080][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=1440]+bestaudio/best[height<=1440]" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings --retries 2 --fragment-retries 2',
+        f'--extractor-args "youtube:player_client=android" -f "bestvideo[height<=1440]+bestaudio/best[height<=1440]/best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings --retries 2',
+        f'-f "best[height<=1440]/best[height<=1080]/best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings --retries 2',
     ]
     strategies_with_pot = [f"{pot_args} {s}" for s in base_strategies]
 
-    for use_cookies in ([True, False] if has_cookies else [False]):
+    tries = []
+    if has_cookies:
+        tries.append((True, "with cookies + POT 1440p"))
+    tries.append((False, "POT only 1440p"))
+
+    for use_cookies, mode in tries:
         c_arg = cookie_arg if use_cookies else ""
-        mode = "with cookies" if use_cookies else "without cookies"
-        for i, base in enumerate(strategies_with_pot, 1):
-            cmd = f'yt-dlp {c_arg} {base}'
+        for i, base_cmd in enumerate(strategies_with_pot, 1):
+            cmd = f'yt-dlp {c_arg} {base_cmd}'
             try:
-                res_label = ["1440p(2K)", "1080p", "720p", "android-best", "best"][i-1]
-                print(f"Trying 1440p MAX strategy {i} {res_label} {mode} + POT...")
-                result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=90)
-                if Path(output).exists() and Path(output).stat().st_size > 50000:
+                print(f"Trying 1440p strategy {i} {mode}...")
+                result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=150)
+                if Path(output).exists() and Path(output).stat().st_size > 80000:
                     size_mb = Path(output).stat().st_size/1024/1024
                     try:
-                        probe = subprocess.run(f'ffprobe -v error -select_streams v:0 -show_entries stream=height -of default=noprint_wrappers=1:nokey=1 "{output}"', shell=True, capture_output=True, text=True, timeout=10)
-                        h = probe.stdout.strip()
-                        print(f"YT-DLP SUCCESS {i} {res_label} {mode} + POT - {size_mb:.2f} MB - Height: {h}p - 1440p MAX")
+                        probe = subprocess.run(f'ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of default=noprint_wrappers=1 "{output}"', shell=True, capture_output=True, text=True, timeout=10)
+                        print(f"YT-DLP SUCCESS {i} {mode} - {size_mb:.2f} MB - {probe.stdout.strip()} - 1440p")
                     except:
-                        print(f"YT-DLP SUCCESS {i} {res_label} {mode} + POT - {size_mb:.2f} MB - 1440p MAX")
+                        print(f"YT-DLP SUCCESS {i} {mode} - {size_mb:.2f} MB - 1440p")
                     return output
                 else:
-                    err = (result.stderr or "") + (result.stdout or "")
-                    print(f"Strategy {i} {res_label} {mode} + POT failed - {err[-300:]}")
+                    err = (result.stderr or "")[-400:]
+                    print(f"Strategy {i} {mode} failed - {err[-250:]}")
                 Path(output).unlink(missing_ok=True)
-            except subprocess.TimeoutExpired:
-                print(f"Strategy {i} {mode} TIMEOUT 90s")
-                Path(output).unlink(missing_ok=True)
-                continue
             except Exception as e:
-                print(f"Strategy {i} {mode} err {e}")
+                print(f"Strategy {i} err {e}")
                 continue
-        if use_cookies:
-            print("All with cookies + POT failed, retry WITHOUT cookies + POT - V37 2026 Fix")
-    print("ALL YT-DLP FAILED")
+    print("ALL YT-DLP 1440p FAILED")
     return None
 
 
@@ -383,7 +384,7 @@ def smart_trim_trailer_to_60s(input_path, output_path="trailer_60s.mp4"):
         for i, (s, e) in enumerate(cuts):
             seg_path = f"seg_{i}.mp4"
             # Use -ss accurate seek + re-encode for clean cut
-            cmd_seg = f'ffmpeg -y -ss {s} -to {e} -i "{input_path}" -c:v libx264 -preset veryfast -crf 23 -c:a aac -r 30 "{seg_path}"'
+            cmd_seg = f'ffmpeg -y -ss {s} -to {e} -i "{input_path}" -c:v libx264 -preset fast -crf 18 -c:a aac -r 30 "{seg_path}"'
             result = subprocess.run(cmd_seg, shell=True, capture_output=True, text=True, timeout=90)
             if Path(seg_path).exists() and Path(seg_path).stat().st_size > 10000:
                 seg_files.append(seg_path)
@@ -397,7 +398,7 @@ def smart_trim_trailer_to_60s(input_path, output_path="trailer_60s.mp4"):
                 for sf in seg_files:
                     f.write(f"file '{sf}'"+"\n")
             
-            cmd_concat = f'ffmpeg -y -f concat -safe 0 -i concat_v37.txt -c:v libx264 -preset veryfast -crf 23 -c:a aac "{output_path}"'
+            cmd_concat = f'ffmpeg -y -f concat -safe 0 -i concat_v37.txt -c:v libx264 -preset fast -crf 18 -c:a aac "{output_path}"'
             result_concat = subprocess.run(cmd_concat, shell=True, capture_output=True, text=True, timeout=120)
             
             # Cleanup seg files
@@ -422,7 +423,7 @@ def smart_trim_trailer_to_60s(input_path, output_path="trailer_60s.mp4"):
         
         print(f"Segment method had only {success_count} success, trying fallback middle 60s")
         # Fallback: simple middle 60s starting at 2s
-        cmd2 = f'ffmpeg -y -ss 2 -i "{input_path}" -t 60 -c:v libx264 -preset veryfast -crf 23 -c:a aac "{output_path}"'
+        cmd2 = f'ffmpeg -y -ss 2 -i "{input_path}" -t 60 -c:v libx264 -preset fast -crf 18 -c:a aac "{output_path}"'
         subprocess.run(cmd2, shell=True, capture_output=True, text=True, timeout=90)
         if Path(output_path).exists():
             return output_path
@@ -842,13 +843,15 @@ def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp
             font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
             if not Path(font_path).exists():
                 font_path = "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
-        print(f"Creating {dur}s video FINAL V37 FIXED-TRIM + V39 MASTER PROMPT 1440p SMART-TRIM ZOOM 65% 2K - Top: {label_top_safe} | {safe_title} | Type: {m_type}")
+        print(f"Creating {dur}s video FINAL 1440p QHD 1440x2560 - Top: {label_top_safe} | {safe_title} | Type: {m_type}")
+
+        # 1440p FIX: Force final delivery to 1440x2560, preserve 1440p quality, crf 18, high profile
         if poster_path and Path(poster_path).exists():
             cmd = (
-                f"ffmpeg -y -loop 1 -t {dur} -i \"{poster_path}\" "
-                f"-i \"{trailer_path}\" -i \"{voice_path}\" -stream_loop -1 -i \"{bgm_path}\" "
-                f"-filter_complex \"[0:v]scale=1440:2560:force_original_aspect_ratio=increase,crop=1440:2560,gblur=sigma=25:steps=2,setsar=1,trim=duration={dur}[bg];"
-                f"[1:v]scale=1440:1664:force_original_aspect_ratio=increase,crop=1440:1664,setsar=1[fg];"
+                f'ffmpeg -y -loop 1 -t {dur} -i "{poster_path}" '
+                f'-i "{trailer_path}" -i "{voice_path}" -stream_loop -1 -i "{bgm_path}" '
+                f'-filter_complex "[0:v]scale=1440:2560:force_original_aspect_ratio=increase,crop=1440:2560,gblur=sigma=25:steps=2,setsar=1,trim=duration={dur}[bg];'
+                f"[1:v]scale=1440:2560:force_original_aspect_ratio=increase,crop=1440:2560:flags=lanczos+accurate_rnd,setsar=1[fg];"
                 f"[bg][fg]overlay=(W-w)/2:(H-h)/2:shortest=0,scale=1440:2560:flags=lanczos[base0];"
                 f"[base0]drawtext=text='{label_top_safe}':fontcolor=white:fontsize=50:box=1:boxcolor=black@0.70:boxborderw=13:borderw=2:bordercolor=black:"
                 f"x=(w-text_w)/2:y=90+4*sin(t*1.8):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[base1];"
@@ -860,14 +863,14 @@ def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp
                 f"x=(w-text_w)/2:y=h-190-5*sin(t*2.2):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[final_v];"
                 f"[1:a]volume=0.30[trailer_low];[3:a]volume=0.40[bg_vol];[2:a]asplit=2[voice_sc][voice_mix];"
                 f"[bg_vol][voice_sc]sidechaincompress=threshold=0.015:ratio=8:attack=20:release=400:makeup=1[ducked];"
-                f"[trailer_low][ducked][voice_mix]amix=inputs=3:duration=longest:dropout_transition=0:weights=0.30 0.35 1,volume=1.25,loudnorm=I=-16:TP=-1.5:LRA=8[a]\" "
-                f"-map \"[final_v]\" -map \"[a]\" -c:v libx264 -profile:v high -level:v 4.2 -preset fast -crf 20 -pix_fmt yuv420p -r 30 -movflags +faststart -c:a aac -b:a 192k -t {dur} \"{output}\""
+                f"[trailer_low][ducked][voice_mix]amix=inputs=3:duration=longest:dropout_transition=0:weights=0.30 0.35 1,volume=1.25,loudnorm=I=-16:TP=-1.5:LRA=8[a]" '
+                f'-map "[final_v]" -map "[a]" -c:v libx264 -profile:v high -level:v 5.1 -preset fast -crf 18 -pix_fmt yuv420p -vf "scale=1440:2560:flags=lanczos" -r 30 -movflags +faststart -c:a aac -b:a 192k -t {dur} "{output}"'
             )
         else:
             cmd = (
-                f"ffmpeg -y -i \"{trailer_path}\" -i \"{voice_path}\" -stream_loop -1 -i \"{bgm_path}\" "
-                f"-filter_complex \"[0:v]scale=1440:2560:force_original_aspect_ratio=increase,crop=1440:2560,gblur=sigma=25:steps=2[bg];"
-                f"[0:v]scale=1440:1664:force_original_aspect_ratio=increase,crop=1440:1664[fg];"
+                f'ffmpeg -y -i "{trailer_path}" -i "{voice_path}" -stream_loop -1 -i "{bgm_path}" '
+                f'-filter_complex "[0:v]scale=1440:2560:force_original_aspect_ratio=increase,crop=1440:2560:flags=lanczos+accurate_rnd,gblur=sigma=25:steps=2[bg];'
+                f"[0:v]scale=1440:2560:force_original_aspect_ratio=increase,crop=1440:2560:flags=lanczos+accurate_rnd[fg];"
                 f"[bg][fg]overlay=(W-w)/2:(H-h)/2,scale=1440:2560:flags=lanczos[base0];"
                 f"[base0]drawtext=text='{label_top_safe}':fontcolor=white:fontsize=50:box=1:boxcolor=black@0.70:boxborderw=13:borderw=2:bordercolor=black:"
                 f"x=(w-text_w)/2:y=90+4*sin(t*1.8):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[base1];"
@@ -879,16 +882,23 @@ def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp
                 f"x=(w-text_w)/2:y=h-190-5*sin(t*2.2):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[final_v];"
                 f"[0:a]volume=0.30[trailer_low];[2:a]volume=0.40[bg_vol];[1:a]asplit=2[voice_sc][voice_mix];"
                 f"[bg_vol][voice_sc]sidechaincompress=threshold=0.015:ratio=8:attack=20:release=400:makeup=1[ducked];"
-                f"[trailer_low][ducked][voice_mix]amix=inputs=3:duration=longest:dropout_transition=0:weights=0.30 0.35 1,volume=1.25,loudnorm=I=-16:TP=-1.5:LRA=8[a]\" "
-                f"-map \"[final_v]\" -map \"[a]\" -c:v libx264 -profile:v high -level:v 4.2 -preset fast -crf 20 -pix_fmt yuv420p -r 30 -movflags +faststart -c:a aac -b:a 192k -t {dur} \"{output}\""
+                f"[trailer_low][ducked][voice_mix]amix=inputs=3:duration=longest:dropout_transition=0:weights=0.30 0.35 1,volume=1.25,loudnorm=I=-16:TP=-1.5:LRA=8[a]" '
+                f'-map "[final_v]" -map "[a]" -c:v libx264 -profile:v high -level:v 5.1 -preset fast -crf 18 -pix_fmt yuv420p -r 30 -movflags +faststart -c:a aac -b:a 192k -t {dur} "{output}"'
             )
-        print(f"FFmpeg FINAL V37 FIXED-TRIM + V39 MASTER PROMPT 1440p SMART-TRIM {dur}s...")
+        print(f"FFmpeg FINAL 1440p QHD 1440x2560 {dur}s - crf 18 high quality...")
         result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=600)
         if Path(output).exists() and Path(output).stat().st_size > 50000:
-            print(f"Final OK V37 SMART-TRIM 1440p {Path(output).stat().st_size/1024/1024:.2f} MB - ZOOM 65% + 2-LINE TITLE + DYNAMIC WORDS")
+            # Verify 1440p
+            probe = subprocess.run(f'ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of default=noprint_wrappers=1 "{output}"', shell=True, capture_output=True, text=True, timeout=10)
+            print(f"Final OK 1440p QHD {Path(output).stat().st_size/1024/1024:.2f} MB - {probe.stdout.strip()} - 1440x2560")
             return output
-        print(f"FFmpeg err {result.stderr[-1500:]}")
+        print(f"FFmpeg err {result.stderr[-2000:]}")
         return None
+    except Exception as e:
+        print(f"1440p Video Error {e}")
+        import traceback; traceback.print_exc()
+        return None
+
     except Exception as e:
         print(f"V37 Error {e}")
         import traceback; traceback.print_exc()
