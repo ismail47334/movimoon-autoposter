@@ -1,0 +1,30 @@
+# Temp video/audio files (auto-generated)
+trailer.mp4
+trailer_60s.mp4
+voice.mp3
+voice_studio.mp3
+final.mp4
+bgm.mp3
+poster.jpg
+seg_*.mp4
+concat.txt
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Env
+.env
+venv/
+.env.local
+
+# Keep these - DO NOT IGNORE (important)
+!posted_history.json
+!*.py
+!*.yml
+!requirements.txt
+
+# YouTube tokens (secret)
+youtube_tokens.txt
+client_secrets.json
