@@ -1,0 +1,6 @@
+requests
+edge-tts
+yt-dlp[default]
+bgutil-ytdlp-pot-provider
+brotli
+groq
