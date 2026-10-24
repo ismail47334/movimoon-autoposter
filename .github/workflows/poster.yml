@@ -1,0 +1,73 @@
+name: MoviMoon Video AutoPoster - FINAL V37 FIXED-TRIM + MASTER PROMPT 1440p FB + YT + PAGE ONLY SUCCESS
+
+on:
+  schedule:
+    - cron: '0 4 * * *'
+    - cron: '0 9 * * *'
+    - cron: '0 14 * * *'
+  workflow_dispatch:
+
+jobs:
+  post-videos:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install FFmpeg + Deno + yt-dlp + Fonts + Google APIs
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-dejavu-core fonts-noto-core
+          fc-list | head -20
+          curl -fsSL https://deno.land/install.sh | sh
+          echo "$HOME/.deno/bin" >> $GITHUB_PATH
+          export DENO_INSTALL="$HOME/.deno"
+          export PATH="$DENO_INSTALL/bin:$PATH"
+          $HOME/.deno/bin/deno --version
+          pip install -r requirements.txt
+          pip install -U "yt-dlp[default]" yt-dlp-ejs groq google-api-python-client google-auth google-auth-oauthlib google-auth-httplib2
+          yt-dlp --version
+
+      - name: Create cookies.txt
+        env:
+          YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
+        run: |
+          if [ -n "$YOUTUBE_COOKIES" ]; then
+            printf "%s" "$YOUTUBE_COOKIES" > cookies.txt
+            echo "cookies.txt: $(wc -c < cookies.txt) bytes"
+          else
+            echo "No YOUTUBE_COOKIES"
+          fi
+          ls -lh
+
+      - name: Run V37 FIXED-TRIM + MASTER PROMPT 1440p FB + YT Shorts
+        env:
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
+          FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}
+          FB_GROUP_ID: ${{ secrets.FB_GROUP_ID }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+          YOUTUBE_CHANNEL_ID: ${{ secrets.YOUTUBE_CHANNEL_ID }}
+        run: |
+          export DENO_INSTALL="$HOME/.deno"
+          export PATH="$DENO_INSTALL/bin:$PATH"
+          deno --version
+          python -u movimoon-video-autoposter.py
+
+      - name: Commit posted history
+        run: |
+          git config --global user.name 'MoviMoon Bot'
+          git config --global user.email 'bot@movimoon.online'
+          git add posted_history.json || echo "No history"
+          git diff --staged --quiet || git commit -m "Update history V37 FIXED-TRIM [skip ci]"
+          git push || echo "No changes"
