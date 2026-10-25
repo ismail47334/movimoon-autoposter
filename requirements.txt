@@ -1,19 +1,18 @@
-# MoviMoon AutoPoster - FINAL V37 FIXED-TRIM + V39 MASTER PROMPT 1440p
+# MoviMoon AutoPoster - V2 FINAL - Video + Movie Picks Image
 # Core
 requests
 edge-tts
 yt-dlp
 yt-dlp-ejs
-brotli
+pillow
 
-# AI / LLM
+# AI / LLM - NEW SDK + fallback
 groq
+google-genai
+google-generativeai
 
 # YouTube Shorts API
 google-api-python-client
 google-auth
 google-auth-oauthlib
 google-auth-httplib2
-
-# Optional but recommended for GitHub Actions
-# yt-dlp[default] is installed via pip install -U in YAML, but listed here for local dev
