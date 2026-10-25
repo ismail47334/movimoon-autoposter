@@ -1,5 +1,5 @@
 
-name: MoviMoon Movie Picks - V3 4 Movies PURE Genre Center Watermark
+name: MoviMoon Movie Picks - V4 GAP Watermark Real Highlight gemini-3.5-flash-lite
 
 on:
   schedule:
@@ -44,5 +44,5 @@ jobs:
           git config --global user.name 'MoviMoon Picks Bot'
           git config --global user.email 'picks@movimoon.online'
           git add picks_history.json || echo "No history yet"
-          git diff --staged --quiet || git commit -m "Update picks history V3 4 movies pure [skip ci]"
+          git diff --staged --quiet || git commit -m "Update picks history V4 GAP real highlight [skip ci]"
           git push || echo "No changes"
