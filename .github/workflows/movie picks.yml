@@ -1,5 +1,5 @@
 
-name: MoviMoon Movie Picks - V5 ORIGINAL Genre 180px GAP
+name: MoviMoon Movie Picks - V7 ORIGINAL + Hindi Series + South 180px GAP
 
 on:
   schedule:
@@ -28,7 +28,7 @@ jobs:
           pip install requests google-genai pillow
           ffmpeg -version | head -1
 
-      - name: Run V5 ORIGINAL Genre AutoPoster
+      - name: Run V7 ORIGINAL + Hindi Series + South AutoPoster
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -44,5 +44,5 @@ jobs:
           git config --global user.name 'MoviMoon Picks Bot'
           git config --global user.email 'picks@movimoon.online'
           git add picks_history.json || echo "No history yet"
-          git diff --staged --quiet || git commit -m "Update picks history V5 ORIGINAL 180px GAP [skip ci]"
+          git diff --staged --quiet || git commit -m "Update picks history V7 Hindi Series South Indian ORIGINAL 180px GAP [skip ci]"
           git push || echo "No changes"
