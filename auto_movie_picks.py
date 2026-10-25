@@ -15,7 +15,7 @@ HISTORY_FILE = "picks_history.json"
 try:
     import google.generativeai as genai
     genai.configure(api_key=GEMINI_API_KEY)
-    gemini_model = genai.GenerativeModel("gemini-2.0-flash-lite")
+    gemini_model = genai.GenerativeModel("gemini-3.5-flash-lite")
     GEMINI_OK = True
     print("Gemini OK")
 except Exception as e:
