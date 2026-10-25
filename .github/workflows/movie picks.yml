@@ -1,11 +1,11 @@
 
-name: MoviMoon Movie Picks - V2 Image Watermark Icons CTA
+name: MoviMoon Movie Picks - V3 4 Movies PURE Genre Center Watermark
 
 on:
   schedule:
-    - cron: '0 2 * * *'
-    - cron: '0 8 * * *'
-    - cron: '0 15 * * *'
+    - cron: '0 2 * * *'   # 8AM BD
+    - cron: '0 8 * * *'   # 2PM BD
+    - cron: '0 15 * * *'  # 9PM BD
   workflow_dispatch:
 
 jobs:
@@ -28,7 +28,7 @@ jobs:
           pip install requests google-genai google-generativeai pillow
           ffmpeg -version | head -1
 
-      - name: Run V2 Movie Picks AutoPoster
+      - name: Run V3 PURE 4 Movies AutoPoster
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -44,5 +44,5 @@ jobs:
           git config --global user.name 'MoviMoon Picks Bot'
           git config --global user.email 'picks@movimoon.online'
           git add picks_history.json || echo "No history yet"
-          git diff --staged --quiet || git commit -m "Update picks history V2 icons+watermark [skip ci]"
+          git diff --staged --quiet || git commit -m "Update picks history V3 4 movies pure [skip ci]"
           git push || echo "No changes"
