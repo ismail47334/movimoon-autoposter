@@ -1,5 +1,5 @@
 
-name: MoviMoon Movie Picks - V4 GAP Watermark Real Highlight gemini-3.5-flash-lite
+name: MoviMoon Movie Picks - V5 ORIGINAL Genre 180px GAP
 
 on:
   schedule:
@@ -25,10 +25,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg fonts-dejavu-core fonts-noto-core fonts-noto-cjk
-          pip install requests google-genai google-generativeai pillow
+          pip install requests google-genai pillow
           ffmpeg -version | head -1
 
-      - name: Run V3 PURE 4 Movies AutoPoster
+      - name: Run V5 ORIGINAL Genre AutoPoster
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -36,7 +36,7 @@ jobs:
           FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}
           FB_ACCESS_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}
         run: |
-          ls -lh watermark.png || echo "watermark missing - will use text fallback"
+          ls -lh watermark.png || echo "watermark missing"
           python -u auto_movie_picks.py
 
       - name: Commit picks history
@@ -44,5 +44,5 @@ jobs:
           git config --global user.name 'MoviMoon Picks Bot'
           git config --global user.email 'picks@movimoon.online'
           git add picks_history.json || echo "No history yet"
-          git diff --staged --quiet || git commit -m "Update picks history V4 GAP real highlight [skip ci]"
+          git diff --staged --quiet || git commit -m "Update picks history V5 ORIGINAL 180px GAP [skip ci]"
           git push || echo "No changes"
