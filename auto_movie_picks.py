@@ -3,7 +3,7 @@ import os, requests, random, re, json, subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
 
-print("=== MoviMoon Movie Picks AutoPoster V5 - ORIGINAL Genres + 180px GAP + Real Highlight ===")
+print("=== MoviMoon Movie Picks AutoPoster V7 - ORIGINAL Genres + Hindi Series + South + 180px GAP ===")
 
 TMDB_API_KEY = os.getenv("TMDB_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
@@ -41,16 +41,20 @@ GENRES = {
 }
 
 INDUSTRY_CONFIG = {
-    "hollywood": {"lang": "en", "desc": "Hollywood", "region": "US", "country_filter": "US"},
-    "bollywood": {"lang": "hi", "desc": "Bollywood", "region": "IN", "country_filter": "IN"},
+    "hollywood": {"lang": "en", "desc": "Hollywood", "region": "US"},
+    "bollywood": {"lang": "hi", "desc": "Bollywood", "region": "IN"},
+    "bollywood_series": {"lang": "hi", "desc": "Bollywood Series", "region": "IN", "media": "tv"},
     "south": {"lang": "te", "desc": "South Indian", "region": "IN", "langs": ["te","ta","ml","kn"]},
+    "south_series": {"lang": "te", "desc": "South Indian Series", "region": "IN", "media": "tv", "langs": ["te","ta","ml","kn"]},
     "series": {"lang": "en", "desc": "Hollywood Series", "media": "tv"},
+    "korean": {"lang": "ko", "desc": "Korean", "region": "KR"},
+    "korean_series": {"lang": "ko", "desc": "Korean Series", "region": "KR", "media": "tv"},
 }
 
 TIME_SLOTS = {
-    "morning": {"bd_time": "সকাল ৮টা", "pool": ["action","adventure","war","comedy"], "industries": ["hollywood","bollywood","south"]},
-    "afternoon": {"bd_time": "দুপুর ২টা", "pool": ["crime","mystery","drama","romance"], "industries": ["hollywood","bollywood","south","series"]},
-    "night": {"bd_time": "রাত ৯টা", "pool": ["horror","thriller","sci_fi","fantasy"], "industries": ["hollywood","bollywood","series"]}
+    "morning": {"bd_time": "সকাল ৮টা", "pool": ["action","adventure","war","comedy"], "industries": ["hollywood","bollywood","bollywood_series","south","south_series","korean","korean_series"]},
+    "afternoon": {"bd_time": "দুপুর ২টা", "pool": ["crime","mystery","drama","romance"], "industries": ["hollywood","bollywood","bollywood_series","south","south_series","series","korean","korean_series"]},
+    "night": {"bd_time": "রাত ৯টা", "pool": ["horror","thriller","sci_fi","fantasy"], "industries": ["hollywood","bollywood","bollywood_series","south","south_series","series","korean","korean_series"]}
 }
 
 def get_current_slot():
@@ -78,7 +82,7 @@ def is_posted(tmdb_id, history, days=30):
     except: return False
 
 def fetch_tmdb_pure_genre(genre_key, industry_key, count=4):
-    """V5 - Pure original genre, strict industry filter, no keyword fallback mixing"""
+    """V6 - Pure original genre, strict industry, South Indian included"""
     genre_cfg = GENRES[genre_key]
     ind_cfg = INDUSTRY_CONFIG[industry_key]
     is_tv = ind_cfg.get("media") == "tv"
@@ -88,26 +92,39 @@ def fetch_tmdb_pure_genre(genre_key, industry_key, count=4):
     min_year = datetime.now().year - 12
 
     urls = []
-    # Strict industry filtering
     if industry_key == "hollywood":
-        # Hollywood = English language + US region, popular
         for page in [1,2,3]:
-            url = f"{base}/discover/{mtype}?api_key={TMDB_API_KEY}&with_genres={genre_id}&primary_release_date.gte={min_year}-01-01&sort_by=popularity.desc&vote_count.gte=50&with_original_language=en&page={page}"
             if is_tv:
-                url = f"{base}/discover/{mtype}?api_key={TMDB_API_KEY}&with_genres={genre_id}&first_air_date.gte={min_year}-01-01&sort_by=popularity.desc&vote_count.gte=30&with_original_language=en&page={page}"
+                url = f"{base}/discover/{mtype}?api_key={TMDB_API_KEY}&with_genres={genre_id}&first_air_date.gte={min_year}-01-01&sort_by=popularity.desc&vote_count.gte=20&with_original_language=en&page={page}"
+            else:
+                url = f"{base}/discover/{mtype}?api_key={TMDB_API_KEY}&with_genres={genre_id}&primary_release_date.gte={min_year}-01-01&sort_by=popularity.desc&vote_count.gte=30&with_original_language=en&page={page}"
             urls.append(url)
-    elif industry_key == "bollywood":
+    elif industry_key in ["bollywood", "bollywood_series"]:
         for page in [1,2,3]:
-            url = f"{base}/discover/{mtype}?api_key={TMDB_API_KEY}&with_genres={genre_id}&primary_release_date.gte={min_year}-01-01&sort_by=popularity.desc&vote_count.gte=10&with_original_language=hi&page={page}"
+            if is_tv:
+                url = f"{base}/discover/{mtype}?api_key={TMDB_API_KEY}&with_genres={genre_id}&first_air_date.gte={min_year}-01-01&sort_by=popularity.desc&vote_count.gte=3&with_original_language=hi&page={page}"
+            else:
+                url = f"{base}/discover/{mtype}?api_key={TMDB_API_KEY}&with_genres={genre_id}&primary_release_date.gte={min_year}-01-01&sort_by=popularity.desc&vote_count.gte=5&with_original_language=hi&page={page}"
             urls.append(url)
-    elif industry_key == "south":
+    elif industry_key in ["south", "south_series"]:
+        # South Indian: te, ta, ml, kn - lower vote threshold because TMDB has less votes for south
         for lang in ind_cfg.get("langs", ["te","ta","ml","kn"]):
             for page in [1,2]:
-                url = f"{base}/discover/{mtype}?api_key={TMDB_API_KEY}&with_genres={genre_id}&primary_release_date.gte={min_year}-01-01&sort_by=popularity.desc&vote_count.gte=5&with_original_language={lang}&page={page}"
+                if is_tv:
+                    url = f"{base}/discover/{mtype}?api_key={TMDB_API_KEY}&with_genres={genre_id}&first_air_date.gte={min_year}-01-01&sort_by=popularity.desc&vote_count.gte=1&with_original_language={lang}&page={page}"
+                else:
+                    url = f"{base}/discover/{mtype}?api_key={TMDB_API_KEY}&with_genres={genre_id}&primary_release_date.gte={min_year}-01-01&sort_by=popularity.desc&vote_count.gte=1&with_original_language={lang}&page={page}"
                 urls.append(url)
+    elif industry_key in ["korean", "korean_series"]:
+        for page in [1,2,3]:
+            if is_tv:
+                url = f"{base}/discover/{mtype}?api_key={TMDB_API_KEY}&with_genres={genre_id}&first_air_date.gte={min_year}-01-01&sort_by=popularity.desc&vote_count.gte=5&with_original_language=ko&page={page}"
+            else:
+                url = f"{base}/discover/{mtype}?api_key={TMDB_API_KEY}&with_genres={genre_id}&primary_release_date.gte={min_year}-01-01&sort_by=popularity.desc&vote_count.gte=10&with_original_language=ko&page={page}"
+            urls.append(url)
     elif industry_key == "series":
         for page in [1,2,3]:
-            url = f"{base}/discover/{mtype}?api_key={TMDB_API_KEY}&with_genres={genre_id}&first_air_date.gte={min_year}-01-01&sort_by=popularity.desc&vote_count.gte=30&with_original_language=en&page={page}"
+            url = f"{base}/discover/{mtype}?api_key={TMDB_API_KEY}&with_genres={genre_id}&first_air_date.gte={min_year}-01-01&sort_by=popularity.desc&vote_count.gte=20&with_original_language=en&page={page}"
             urls.append(url)
 
     all_results = []
@@ -116,29 +133,26 @@ def fetch_tmdb_pure_genre(genre_key, industry_key, count=4):
             r = requests.get(url, timeout=15).json()
             for m in r.get("results", []):
                 if not m.get("poster_path"): continue
-                if m.get("vote_count",0) < 5: continue
                 m["media_type"] = mtype
                 m["_industry"] = industry_key
                 m["_genre"] = genre_key
                 all_results.append(m)
         except Exception as e:
-            print(f"Fetch err {e}")
+            print(f"Fetch err {e} {url[:100]}")
             continue
 
-    # Deduplicate and filter pure genre match
+    # Deduplicate
     seen = set()
     pure = []
     for m in all_results:
         mid = m["id"]
         if mid in seen: continue
         seen.add(mid)
-        # Ensure genre match (TMDB sometimes returns secondary genres)
         gids = m.get("genre_ids", [])
-        if genre_id not in gids:
-            # If genre_ids missing (TV sometimes), allow but check popularity
-            if m.get("popularity",0) < 20:
+        if gids and genre_id not in gids:
+            # Allow if popularity high but not pure? Skip to keep pure
+            if m.get("popularity",0) < 30:
                 continue
-        # Year check
         date_str = m.get("release_date") or m.get("first_air_date") or ""
         if date_str:
             try:
@@ -150,8 +164,9 @@ def fetch_tmdb_pure_genre(genre_key, industry_key, count=4):
 
     pure.sort(key=lambda x: x.get("popularity",0), reverse=True)
     random.shuffle(pure)
-    print(f"V5 PURE fetched {len(pure)} for {genre_cfg['title']} - {ind_cfg['desc']} (from {len(all_results)} raw)")
+    print(f"V6 PURE fetched {len(pure)} for {genre_cfg['title']} - {ind_cfg['desc']} (from {len(all_results)} raw) langs: {[m.get('original_language') for m in pure[:4]]}")
     return pure[:count*3]
+
 
 def download_posters(movies):
     files=[]
@@ -365,7 +380,7 @@ def main():
     industry_key=random.choice(slot_cfg['industries'])
     genre_cfg=GENRES[genre_key]
     industry_cfg=INDUSTRY_CONFIG[industry_key]
-    print(f"V5 Selected ORIGINAL: {genre_cfg['title']} (ID:{genre_cfg['id']}) | Industry: {industry_cfg['desc']} | Lang: {industry_cfg['lang']}")
+    print(f"V6 Selected ORIGINAL: {genre_cfg['title']} (ID:{genre_cfg['id']}) | Industry: {industry_cfg['desc']} | Lang: {industry_cfg['lang']}")
 
     history=load_history()
     candidates=fetch_tmdb_pure_genre(genre_key, industry_key, count=4)
@@ -398,8 +413,20 @@ def main():
                 if len(fresh)>=4:
                     break
         if len(fresh) < 4:
-            print(f"❌ Still not enough, abort")
-            return
+            print(f"❌ Not enough for {industry_key}, trying other industries")
+            # Try south if not south already, then hollywood
+            for fallback_ind in ["south", "bollywood", "hollywood"]:
+                if fallback_ind == industry_key: continue
+                print(f"Trying fallback {fallback_ind}")
+                candidates2 = fetch_tmdb_pure_genre(genre_key, fallback_ind, count=4)
+                for m in candidates2:
+                    if m['id'] not in [f['id'] for f in fresh]:
+                        fresh.append(m)
+                    if len(fresh)>=4: break
+                if len(fresh)>=4: break
+            if len(fresh) < 4:
+                print(f"❌ Still not enough after fallbacks, abort")
+                return
 
     unique_ids = set()
     final_fresh=[]
@@ -413,7 +440,7 @@ def main():
         print(f"❌ Duplicate IDs")
         return
 
-    print(f"Final 4 V5 ORIGINAL:")
+    print(f"Final 4 V6 ORIGINAL:")
     for i,m in enumerate(fresh,1):
         print(f"{i}. {m.get('title') or m.get('name')} ({(m.get('release_date') or m.get('first_air_date') or '')[:4]}) ID:{m['id']} Lang:{m.get('original_language')} Industry:{m.get('_industry')}")
 
@@ -428,11 +455,11 @@ def main():
         return
 
     caption=generate_caption_gemini_4movies(fresh, genre_cfg, industry_cfg)
-    print(f"\n=== CAPTION V5 ===\n{caption[:1500]}...\n")
+    print(f"\n=== CAPTION V6 ===\n{caption[:1500]}...\n")
 
     fb=post_to_facebook(collage, caption)
     if fb:
-        print(f"✅ POSTED V5 SUCCESS: {fb.get('id')} | {genre_cfg['title']} - {industry_cfg['desc']}")
+        print(f"✅ POSTED V6 SUCCESS: {fb.get('id')} | {genre_cfg['title']} - {industry_cfg['desc']}")
         for m in fresh:
             history[str(m['id'])]=datetime.now().isoformat()
         save_history(history)
