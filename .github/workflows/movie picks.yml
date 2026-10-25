@@ -1,0 +1,47 @@
+name: MoviMoon Movie Picks - Micro-Genre Pure 9:16 Collage FB Only
+
+on:
+  schedule:
+    - cron: '0 2 * * *'   # সকাল ৮টা BD (02 UTC)
+    - cron: '0 8 * * *'   # দুপুর ২টা BD (08 UTC)
+    - cron: '0 15 * * *'  # রাত ৯টা BD (15 UTC)
+  workflow_dispatch:
+
+jobs:
+  movie-picks-post:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install FFmpeg + Fonts + Python Deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-dejavu-core fonts-noto-core fonts-noto-cjk
+          fc-list | head -5
+          pip install requests google-generativeai
+          ffmpeg -version | head -1
+
+      - name: Run Micro-Genre Movie Picks AutoPoster
+        env:
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
+          FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}
+          FB_ACCESS_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}
+        run: |
+          python -u auto_movie_picks.py
+
+      - name: Commit picks history
+        run: |
+          git config --global user.name 'MoviMoon Picks Bot'
+          git config --global user.email 'picks@movimoon.online'
+          git add picks_history.json || echo "No history yet"
+          git diff --staged --quiet || git commit -m "Update picks history micro-genre [skip ci]"
+          git push || echo "No changes to push"
