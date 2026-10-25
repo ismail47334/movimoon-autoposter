@@ -22,6 +22,7 @@ venv/
 
 # Keep these - DO NOT IGNORE (important)
 !posted_history.json
+!picks_history.json
 !*.py
 !*.yml
 !requirements.txt
