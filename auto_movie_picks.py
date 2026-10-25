@@ -3,7 +3,7 @@ import os, requests, random, re, json, subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
 
-print("=== MoviMoon Movie Picks AutoPoster V3 - 4 Movies PURE Genre + Center Watermark ===")
+print("=== MoviMoon Movie Picks AutoPoster V4 - 4 PURE + GAP Watermark + Real Bengali Highlight ===")
 
 TMDB_API_KEY = os.getenv("TMDB_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
@@ -274,20 +274,72 @@ def download_posters(movies):
             print(f"Poster fail {e}")
     return files
 
+
 def create_2x2_grid_with_center_watermark(image_files, watermark_path="watermark.png", output_file="merged_post.jpg"):
     """
-    4 movies: 2 top, 2 bottom, watermark in exact center with equal gap
-    Layout:
-    [0][1]
-    [WM centered]
-    [2][3]
-    Total 1080x1920 (9:16)
-    Each poster 540x960, scaled and cropped
-    Watermark 900 width, placed at center y=960
+    V4 GAP LAYOUT - Watermark in EMPTY SPACE, not on movies
+    Total canvas 1080x1920
+    Top 2 posters: 540x800 each at y=0
+    GAP: 320px (y=800 to 1120) - watermark centered here
+    Bottom 2 posters: 540x800 each at y=1120
     """
     if len(image_files) < 4:
         print(f"Need 4, got {len(image_files)}")
         return None
+    image_files = image_files[:4]
+
+    # Check duplicate posters by size/content
+    sizes = [Path(p).stat().st_size for p in image_files]
+    if len(set(sizes)) < 4:
+        print(f"WARNING: Duplicate poster sizes detected {sizes}")
+
+    inputs=[]
+    for img in image_files:
+        inputs.extend(["-i", img])
+    
+    has_wm = Path(watermark_path).exists()
+    if has_wm:
+        inputs.extend(["-i", watermark_path])
+        print(f"Watermark OK {Path(watermark_path).stat().st_size/1024:.1f}KB")
+
+    # Scale each poster to 540x800 crop
+    parts=[]
+    for i in range(4):
+        parts.append(f"[{i}:v]scale=540:800:force_original_aspect_ratio=increase,crop=540:800:exact=1[v{i}];")
+    
+    # Create black background 1080x1920 and place posters with GAP
+    # Gap is 320px at middle
+    filter_parts = "".join(parts)
+    # Background
+    filter_parts += "color=c=black:s=1080x1920:r=30:d=1[bg];"
+    # Overlay top 2
+    filter_parts += "[bg][v0]overlay=0:0[bg1];"
+    filter_parts += "[bg1][v1]overlay=540:0[bg2];"
+    # Overlay bottom 2 at y=1120 (800+320)
+    filter_parts += "[bg2][v2]overlay=0:1120[bg3];"
+    filter_parts += "[bg3][v3]overlay=540:1120[withposters];"
+
+    if has_wm:
+        # Scale watermark to 800 width max, keep aspect, place in GAP center
+        # GAP is y=800 to 1120 (320px height), center is y=800 + (320-h)/2 = 960 - h/2
+        # x center = (1080-w)/2
+        filter_parts += "[4:v]scale=800:160:force_original_aspect_ratio=decrease:eval=frame[wm];"
+        filter_parts += "[withposters][wm]overlay=(W-w)/2:800+(320-h)/2:format=auto[out]"
+    else:
+        font="/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+        filter_parts += f"[withposters]drawbox=x=0:y=800:w=1080:h=320:color=black:t=fill,drawtext=text='WATCH ON MOVIMOON.ONLINE':fontfile={font}:fontcolor=white:fontsize=42:x=(w-text_w)/2:y=800+(320-text_h)/2[out]"
+
+    cmd=["ffmpeg","-y"]+inputs+["-filter_complex",filter_parts,"-map","[out]","-frames:v","1","-q:v","2",output_file]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60, check=True)
+        print(f"Collage V4 GAP created {output_file} {Path(output_file).stat().st_size/1024:.1f}KB - 2 top + GAP 320px + 2 bottom")
+        return output_file
+    except Exception as e:
+        print(f"Collage V4 err {e}")
+        if 'result' in locals():
+            print(result.stderr[-2000:])
+        return None
+
     # Ensure exactly 4, no duplicates
     if len(set(image_files)) < len(image_files):
         print("Duplicate files detected, removing")
@@ -338,7 +390,7 @@ def generate_caption_gemini_4movies(movies, micro_cfg, industry_cfg):
             "name": m.get("title") or m.get("name"),
             "year": (m.get("release_date") or m.get("first_air_date") or "2023")[:4],
             "rating": round(m.get("vote_average",7.0),1),
-            "overview": m.get("overview","")[:200],
+            "overview": m.get("overview","")[:400],
             "type": micro_cfg["title"]
         })
     
@@ -396,7 +448,7 @@ Data: {json.dumps(movie_data, ensure_ascii=False)}
     text_result=""
     if client and GEMINI_OK:
         try:
-            for model_name in ["gemini-2.5-flash-lite","gemini-2.0-flash-lite","gemini-1.5-flash","gemini-1.5-flash-latest"]:
+            for model_name in ["gemini-3.5-flash-lite","gemini-2.5-flash-lite","gemini-2.0-flash-lite","gemini-2.0-flash","gemini-1.5-flash-8b","gemini-flash-latest"]:
                 try:
                     resp = client.models.generate_content(model=model_name, contents=prompt)
                     text_result = resp.text
@@ -417,14 +469,35 @@ Data: {json.dumps(movie_data, ensure_ascii=False)}
             print(f"OLD fail {e}")
 
     if not text_result:
+        # REAL fallback with unique Bengali highlight per movie based on overview
+        def make_bengali_highlight(overview, title):
+            overview = overview.lower()
+            if "dream" in overview or "nightmare" in overview:
+                return "স্বপ্ন ও বাস্তবতার মাঝে আটকে পড়া এক রহস্যময় যাত্রা। প্রতিটি স্বপ্নেই লুকিয়ে আছে ভয়ানক সত্য।"
+            elif "snow" in overview or "arctic" in overview or "ice" in overview or "frozen" in overview:
+                return "বরফে ঢাকা মৃত্যুপুরীতে টিকে থাকার লড়াই। ঠান্ডার চেয়েও ভয়ংকর কিছু অপেক্ষা করছে।"
+            elif "serial" in overview or "killer" in overview or "murder" in overview:
+                return "এক সিরিয়াল কিলারের নৃশংস খেলা। প্রতিটি খুনের পেছনে লুকিয়ে আছে গভীর রহস্য।"
+            elif "time" in overview or "future" in overview or "past" in overview:
+                return "সময়ের জালে আটকে পড়া এক অবিশ্বাস্য কাহিনী। অতীত বদলালে ভবিষ্যৎ ধ্বংস হবে।"
+            elif "survival" in overview or "survive" in overview:
+                return "মৃত্যুর মুখ থেকে বেঁচে ফেরার লড়াই। এক মুহূর্তের ভুলে সব শেষ হয়ে যাবে।"
+            elif "military" in overview or "soldier" in overview or "mission" in overview:
+                return "একদল সাহসী সৈনিকের অসম্ভব মিশন। দেশের জন্য জীবন বাজি রাখার গল্প।"
+            elif "found footage" in overview or "paranormal" in overview or "ghost" in overview:
+                return "ক্যামেরায় ধরা পড়া সত্যিকারের আতঙ্ক। যা দেখবেন তা বিশ্বাস করতে পারবেন না।"
+            else:
+                return f"{title} এর অসাধারণ গল্পে রহস্য ও উত্তেজনা ভরপুর। শেষ পর্যন্ত চোখ সরাতে পারবেন না।"
+
         lines=[f"🍿 MoviMoon Movie Picks: {micro_cfg['title']}", "", micro_cfg['desc'], ""]
         for i, md in enumerate(movie_data,1):
+            unique_highlight = make_bengali_highlight(md.get('overview',''), md['name'])
             lines.append(f"🎬 {i}. {md['name']} ({md['year']})")
             lines.append(f"⭐ IMDb Rating: {md['rating']}/10")
             lines.append(f"📺 OTT Platform: Check MoviMoon.Online")
             lines.append(f"🎭 Movie Type: {micro_cfg['title']}")
             lines.append(f"📅 Release Year: {md['year']}")
-            lines.append(f"💡 Highlight: একটি অসাধারণ গল্প যা আপনাকে মুগ্ধ করবে। শেষ পর্যন্ত টানটান উত্তেজনা থাকবে।")
+            lines.append(f"💡 Highlight: {unique_highlight}")
             lines.append("")
         lines.append("👉 দুর্দান্ত সব মুভি/সিরিজ দেখতে বা ডাউনলোড করতে এখনি গুগলে সার্চ করুন বা সরাসরি ভিজিট করুন MoviMoon.Online ।")
         lines.append("")
