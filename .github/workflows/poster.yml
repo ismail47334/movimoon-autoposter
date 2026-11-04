@@ -1,4 +1,4 @@
-name: MoviMoon Video AutoPoster V40.1 FIXED NO-COOKIE
+name: MoviMoon Video AutoPoster V41 ULTIMATE FIXED
 
 on:
   schedule:
@@ -20,55 +20,70 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install FFmpeg + Deno + yt-dlp
+      - name: Install FFmpeg + Deno + Node + yt-dlp + BGUtil FIX
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg fonts-dejavu-core fonts-noto-core
+          # Install Deno
           curl -fsSL https://deno.land/install.sh | sh
           echo "$HOME/.deno/bin" >> $GITHUB_PATH
           export DENO_INSTALL="$HOME/.deno"
           export PATH="$DENO_INSTALL/bin:$PATH"
           $HOME/.deno/bin/deno --version
+          # Install Node 20 for EJS challenge solver
+          curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+          sudo apt-get install -y nodejs
+          node --version
+          npm --version
+          # Install python deps
           pip install -r requirements.txt
-          pip install -U "yt-dlp[default]"
+          pip install -U "yt-dlp[default]" yt-dlp-ejs bgutil-ytdlp-pot-provider fastapi uvicorn httpx
           yt-dlp --version
-          python -m pip show bgutil-ytdlp-pot-provider || true
+          python -c "import bgutil_ytdlp_pot_provider; print('bgutil ok')"
 
-      - name: Start BGUtil PO Token (optional, fallback to android if fails)
+      - name: Start BGUtil PO Token Provider V41 - MUST WORK
         run: |
           export DENO_INSTALL="$HOME/.deno"
           export PATH="$DENO_INSTALL/bin:$PATH"
-          # Try 3 different launch methods - new versions changed CLI
-          nohup python -m bgutil_ytdlp_pot_provider --host 127.0.0.1 --port 4416 > bgutil.log 2>&1 &
-          sleep 2
-          if ! curl -s http://127.0.0.1:4416/ping > /dev/null 2>&1; then
-            pkill -f bgutil || true
-            nohup python -m bgutil_ytdlp_pot_provider.server --host 127.0.0.1 --port 4416 > bgutil.log 2>&1 &
-            sleep 2
-          fi
-          if ! curl -s http://127.0.0.1:4416/ping > /dev/null 2>&1; then
-            pkill -f bgutil || true
-            nohup bgutil-ytdlp-pot-provider --host 127.0.0.1 --port 4416 > bgutil.log 2>&1 &
-            sleep 2
-          fi
-          cat bgutil.log || echo "no log yet - using android client fallback"
-          curl -s http://127.0.0.1:4416/ping && echo "BGUtil OK" || echo "BGUtil not responding - V40 will use android client (NO COOKIE) - this is FINE"
-          ps aux | grep bgutil || true
-          echo $! > bgutil.pid || echo $$ > bgutil.pid
-
-      - name: Create cookies.txt - LAST RESORT ONLY
-        env:
-          YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
-        run: |
-          if [ -n "$YOUTUBE_COOKIES" ] && [ $(printf "%s" "$YOUTUBE_COOKIES" | wc -c) -gt 500 ]; then
-            printf "%s" "$YOUTUBE_COOKIES" > cookies.txt
-            echo "cookies.txt loaded: $(wc -c < cookies.txt) bytes - LAST resort"
+          echo "Starting BGUtil..."
+          # Try method 1 - correct for 2.0.2
+          nohup python -m bgutil_ytdlp_pot_provider --host 127.0.0.1 --port 4416 --verbose > bgutil.log 2>&1 &
+          echo $! > bgutil.pid
+          sleep 6
+          cat bgutil.log || echo "log empty"
+          if curl -s http://127.0.0.1:4416/ping | grep -q "pong\|ok\|bgutil"; then
+            echo "BGUtil RUNNING METHOD1 OK ✅"
           else
-            echo "No valid YOUTUBE_COOKIES - Using NO-COOKIE mode (android client) - RECOMMENDED"
-            echo "# No cookies - no-cookie mode" > cookies.txt
+            echo "Method1 failed, trying method2 with uvicorn"
+            pkill -f bgutil || true
+            sleep 2
+            nohup uvicorn bgutil_ytdlp_pot_provider.server:app --host 127.0.0.1 --port 4416 > bgutil.log 2>&1 &
+            echo $! > bgutil.pid
+            sleep 6
+            cat bgutil.log
           fi
+          curl -s http://127.0.0.1:4416/ping || curl -s http://127.0.0.1:4416/ || echo "BGUtil still not responding, but will try TV clients"
+          ps aux | grep bgutil || true
 
-      - name: Run V40.1 FIXED FB + YT Shorts
+      - name: Clean expired cookies - V41 deletes bad cookies
+        run: |
+          if [ -f cookies.txt ]; then
+            SIZE=$(wc -c < cookies.txt)
+            echo "Found cookies.txt $SIZE bytes"
+            if [ $SIZE -lt 3000 ]; then
+              echo "Expired cookie detected (your 2914 bytes issue) - DELETING - will use TV client"
+              rm cookies.txt
+              echo "# V41 NO COOKIE - TV CLIENT" > cookies.txt
+            else
+              echo "Cookie looks valid, keeping as last resort"
+            fi
+          else
+            echo "No cookies.txt - GOOD, using TV + PO Token"
+            echo "# V41 NO COOKIE" > cookies.txt
+          fi
+          ls -lh cookies.txt || true
+
+      - name: Run V41 ULTIMATE FIXED
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
           FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
@@ -85,16 +100,16 @@ jobs:
           export PATH="$DENO_INSTALL/bin:$PATH"
           python -u movimoon-video-autoposter.py
 
-      - name: Stop BGUtil Provider
+      - name: Stop BGUtil
         if: always()
         run: |
           cat bgutil.log || true
           kill $(cat bgutil.pid) 2>/dev/null || pkill -f bgutil || true
 
-      - name: Commit posted history
+      - name: Commit history
         run: |
           git config --global user.name 'MoviMoon Bot'
           git config --global user.email 'bot@movimoon.online'
           git add posted_history.json || echo "No history"
-          git diff --staged --quiet || git commit -m "Update history V40.1 FIXED [skip ci]"
+          git diff --staged --quiet || git commit -m "Update history V41 ULTIMATE [skip ci]"
           git push || echo "No changes"
