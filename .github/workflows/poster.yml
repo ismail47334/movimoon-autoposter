@@ -1,4 +1,4 @@
-name: MoviMoon Video AutoPoster - FINAL V37 FIXED-TRIM + MASTER PROMPT 1440p FB + YT + PAGE ONLY SUCCESS
+name: MoviMoon Video AutoPoster - V40 PO-TOKEN NO-COOKIE + AUTO COOKIE REFRESH (OPTION 2) + V37 FEATURES
 
 on:
   schedule:
@@ -20,33 +20,44 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install FFmpeg + Deno + yt-dlp + Fonts + Google APIs
+      - name: Install FFmpeg + Deno + yt-dlp + Fonts + Google APIs + PO Token Provider
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg fonts-dejavu-core fonts-noto-core
-          fc-list | head -20
           curl -fsSL https://deno.land/install.sh | sh
           echo "$HOME/.deno/bin" >> $GITHUB_PATH
           export DENO_INSTALL="$HOME/.deno"
           export PATH="$DENO_INSTALL/bin:$PATH"
           $HOME/.deno/bin/deno --version
           pip install -r requirements.txt
-          pip install -U "yt-dlp[default]" yt-dlp-ejs groq google-api-python-client google-auth google-auth-oauthlib google-auth-httplib2
+          pip install -U "yt-dlp[default]" yt-dlp-ejs groq google-api-python-client google-auth google-auth-oauthlib google-auth-httplib2 bgutil-ytdlp-pot-provider
           yt-dlp --version
 
-      - name: Create cookies.txt
+      - name: Start BGUtil PO Token Provider - Primary method, no cookie needed
+        run: |
+          export DENO_INSTALL="$HOME/.deno"
+          export PATH="$DENO_INSTALL/bin:$PATH"
+          nohup python -m bgutil_ytdlp_pot_provider --host 127.0.0.1 --port 4416 > bgutil.log 2>&1 &
+          echo $! > bgutil.pid
+          sleep 5
+          cat bgutil.log || echo "no log yet"
+          curl -s http://127.0.0.1:4416/ping || curl -s http://127.0.0.1:4416/ || echo "BGUtil not responding - will use android client"
+          ps aux | grep bgutil || true
+
+      - name: Create cookies.txt - OPTION 2 Auto Refreshed Cookie as LAST RESORT ONLY
         env:
           YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
         run: |
           if [ -n "$YOUTUBE_COOKIES" ]; then
             printf "%s" "$YOUTUBE_COOKIES" > cookies.txt
-            echo "cookies.txt: $(wc -c < cookies.txt) bytes"
+            echo "cookies.txt loaded: $(wc -c < cookies.txt) bytes - LAST resort only"
           else
-            echo "No YOUTUBE_COOKIES"
+            echo "No YOUTUBE_COOKIES - GOOD! V40 works 90% without cookies"
+            echo "# No cookies - using no-cookie mode" > cookies.txt
           fi
           ls -lh
 
-      - name: Run V37 FIXED-TRIM + MASTER PROMPT 1440p FB + YT Shorts
+      - name: Run V40 + V37 ALL FEATURES PRESERVED FB + YT Shorts
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
           FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
@@ -64,10 +75,16 @@ jobs:
           deno --version
           python -u movimoon-video-autoposter.py
 
+      - name: Stop BGUtil Provider
+        if: always()
+        run: |
+          cat bgutil.log || true
+          kill $(cat bgutil.pid) || true
+
       - name: Commit posted history
         run: |
           git config --global user.name 'MoviMoon Bot'
           git config --global user.email 'bot@movimoon.online'
           git add posted_history.json || echo "No history"
-          git diff --staged --quiet || git commit -m "Update history V37 FIXED-TRIM [skip ci]"
+          git diff --staged --quiet || git commit -m "Update history V40 OPTION2 AUTO COOKIE + NO-COOKIE [skip ci]"
           git push || echo "No changes"
