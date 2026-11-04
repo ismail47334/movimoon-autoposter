@@ -1,4 +1,4 @@
-name: MoviMoon Video AutoPoster V41 ULTIMATE FIXED
+name: MoviMoon V43 NO BGUTIL - TV Type
 
 on:
   schedule:
@@ -12,78 +12,31 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set up Python
+      - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
 
-      - name: Install FFmpeg + Deno + Node + yt-dlp + BGUtil FIX
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg fonts-dejavu-core fonts-noto-core
-          # Install Deno
-          curl -fsSL https://deno.land/install.sh | sh
-          echo "$HOME/.deno/bin" >> $GITHUB_PATH
-          export DENO_INSTALL="$HOME/.deno"
-          export PATH="$DENO_INSTALL/bin:$PATH"
-          $HOME/.deno/bin/deno --version
-          # Install Node 20 for EJS challenge solver
-          curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-          sudo apt-get install -y nodejs
-          node --version
-          npm --version
-          # Install python deps
-          pip install -r requirements.txt
-          pip install -U "yt-dlp[default]" yt-dlp-ejs bgutil-ytdlp-pot-provider fastapi uvicorn httpx
-          yt-dlp --version
-          python -c "import bgutil_ytdlp_pot_provider; print('bgutil ok')"
+      - name: Install FFmpeg + Node + yt-dlp V43
+        run:
+          |
+            sudo apt-get update -y
+            sudo apt-get install -y ffmpeg fonts-noto-core
+            curl -fsSL https://deb.nodesource.com/setup20^x | sudo -E bash -
+            sudo apt-get install -y nodejs
+            node --version
+            python -m pip install --upgrade pip
+            python -m pip install -r requirements.txt --upgrade
+            python -m yt_dlp --version
 
-      - name: Start BGUtil PO Token Provider V41 - MUST WORK
-        run: |
-          export DENO_INSTALL="$HOME/.deno"
-          export PATH="$DENO_INSTALL/bin:$PATH"
-          echo "Starting BGUtil..."
-          # Try method 1 - correct for 2.0.2
-          nohup python -m bgutil_ytdlp_pot_provider --host 127.0.0.1 --port 4416 --verbose > bgutil.log 2>&1 &
-          echo $! > bgutil.pid
-          sleep 6
-          cat bgutil.log || echo "log empty"
-          if curl -s http://127.0.0.1:4416/ping | grep -q "pong\|ok\|bgutil"; then
-            echo "BGUtil RUNNING METHOD1 OK ✅"
-          else
-            echo "Method1 failed, trying method2 with uvicorn"
-            pkill -f bgutil || true
-            sleep 2
-            nohup uvicorn bgutil_ytdlp_pot_provider.server:app --host 127.0.0.1 --port 4416 > bgutil.log 2>&1 &
-            echo $! > bgutil.pid
-            sleep 6
-            cat bgutil.log
-          fi
-          curl -s http://127.0.0.1:4416/ping || curl -s http://127.0.0.1:4416/ || echo "BGUtil still not responding, but will try TV clients"
-          ps aux | grep bgutil || true
+      - name: Clean BAD cookies
+        run:
+          |
+            rm -f cookies.txt
+            echo "# V43 NO COOKIE - TV CLIENT" > cookies.txt
 
-      - name: Clean expired cookies - V41 deletes bad cookies
-        run: |
-          if [ -f cookies.txt ]; then
-            SIZE=$(wc -c < cookies.txt)
-            echo "Found cookies.txt $SIZE bytes"
-            if [ $SIZE -lt 3000 ]; then
-              echo "Expired cookie detected (your 2914 bytes issue) - DELETING - will use TV client"
-              rm cookies.txt
-              echo "# V41 NO COOKIE - TV CLIENT" > cookies.txt
-            else
-              echo "Cookie looks valid, keeping as last resort"
-            fi
-          else
-            echo "No cookies.txt - GOOD, using TV + PO Token"
-            echo "# V41 NO COOKIE" > cookies.txt
-          fi
-          ls -lh cookies.txt || true
-
-      - name: Run V41 ULTIMATE FIXED
+      - name: Run MoviMoon V43
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
           FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
@@ -91,25 +44,19 @@ jobs:
           FB_GROUP_ID: ${{ secrets.FB_GROUP_ID }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
-          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
-          YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
-          YOUTUBE_CHANNEL_ID: ${{ secrets.YOUTUBE_CHANNEL_ID }}
-        run: |
-          export DENO_INSTALL="$HOME/.deno"
-          export PATH="$DENO_INSTALL/bin:$PATH"
-          python -u movimoon-video-autoposter.py
-
-      - name: Stop BGUtil
-        if: always()
-        run: |
-          cat bgutil.log || true
-          kill $(cat bgutil.pid) 2>/dev/null || pkill -f bgutil || true
+          YOUTUBE'CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECREV: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          YOUTUBE'REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+          YOUTUBE_CHANNEL_ID: ${{ secrets.YOUTUBE'CHANNEL_ID }}
+        run:
+          |
+            python -u movimoon-video-autoposter.py
 
       - name: Commit history
+        if: always()
         run: |
           git config --global user.name 'MoviMoon Bot'
           git config --global user.email 'bot@movimoon.online'
-          git add posted_history.json || echo "No history"
-          git diff --staged --quiet || git commit -m "Update history V41 ULTIMATE [skip ci]"
-          git push || echo "No changes"
+          git add posted_history.json || true
+          git diff --staged --quiet || git commit -m "Update history V43 [skip ci]" || true
+          git push || true
