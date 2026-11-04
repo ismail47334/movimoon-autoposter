@@ -1,8 +1,8 @@
-name: MoviMoon Auto Cookie Refresh Bot - V40 OPTION 2
+name: MoviMoon Auto Cookie Refresh Bot - V40.1 FIXED + GH_SECRET AUTO UPDATE
 
 on:
   schedule:
-    - cron: '0 2 * * *'
+    - cron: '0 2 * * *'  # Daily 2 AM UTC
   workflow_dispatch:
 
 jobs:
@@ -11,21 +11,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Install Playwright + Deps
+      - name: Install Playwright + Deps + FFmpeg
         run: |
           pip install playwright requests PyNaCl
           playwright install chromium
           playwright install-deps chromium
           sudo apt-get update && sudo apt-get install -y ffmpeg
 
-      - name: Run Cookie Refresher Bot
+      - name: Run Cookie Refresher V40.1
         env:
           BURNER_EMAIL: ${{ secrets.BURNER_EMAIL }}
           BURNER_PASSWORD: ${{ secrets.BURNER_PASSWORD }}
@@ -35,17 +35,18 @@ jobs:
           python cookie_refresher.py
           ls -lh cookies.txt || echo "no cookies"
           echo "Cookies size: $(wc -c < cookies.txt) bytes"
+          cat cookies.txt | head -20
 
-      - name: Commit refresh log
+      - name: Commit timestamp only
         run: |
           git config --global user.name 'Cookie Bot'
           git config --global user.email 'cookie@movimoon.online'
-          echo "Cookie refresh completed at $(date)" > last_cookie_refresh.txt
+          echo "Cookie refresh completed at $(date) - Size: $(wc -c < cookies.txt) bytes" > last_cookie_refresh.txt
           git add last_cookie_refresh.txt || true
-          git diff --staged --quiet || git commit -m "Auto cookie refresh [skip ci]" || true
-          git push || echo "No push"
+          git diff --staged --quiet || git commit -m "Auto cookie refresh [skip ci] - $(date)" || true
+          git push || echo "No push needed"
 
-      - name: Upload cookies as artifact
+      - name: Upload cookies artifact
         uses: actions/upload-artifact@v4
         with:
           name: cookies-txt
