@@ -15,3 +15,6 @@ playwright
 PyNaCl
 websockets
 brotli
+
+bgutil-ytdlp-pot-provider
+bgutil
