@@ -1,12 +1,8 @@
-# V41 ULTIMATE
 requests
 edge-tts
-yt-dlp
+yt-dlp[default]
 yt-dlp-ejs
 pillow
-bgutil-ytdlp-pot-provider
-fastapi
-uvicorn[standard]
 httpx
 groq
 google-genai
