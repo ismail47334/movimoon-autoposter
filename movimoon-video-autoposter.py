@@ -240,8 +240,7 @@ def download_via_ytdlp_fixed(youtube_url, output="trailer.mp4"):
     })
     
     for idx, strat in enumerate(strategies, 1):
-        print(f"
->> Trying Strategy {idx}/{len(strategies)}: {strat['name']}...")
+        print(f">> Trying Strategy {idx}/{len(strategies)}: {strat['name']}...")
         try:
             result = subprocess.run(strat["cmd"], shell=True, capture_output=True, text=True, timeout=120)
             if Path(output).exists() and Path(output).stat().st_size > 50000:
