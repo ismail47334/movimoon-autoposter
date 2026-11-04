@@ -1,7 +1,8 @@
-name: MoviMoon V43 NO BGUTIL - TV Type
+name: MoviMoon Video AutoPoster - Final
 
 on:
   schedule:
+    # BD Time: সকাল ১০টা, বিকাল ৩টা, রাত ৮টা
     - cron: '0 4 * * *'
     - cron: '0 9 * * *'
     - cron: '0 14 * * *'
@@ -11,52 +12,35 @@ jobs:
   post-videos:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set up Python 3.12
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: '3.11'
 
-      - name: Install FFmpeg + Node + yt-dlp V43
-        run:
-          |
-            sudo apt-get update -y
-            sudo apt-get install -y ffmpeg fonts-noto-core
-            curl -fsSL https://deb.nodesource.com/setup20^x | sudo -E bash -
-            sudo apt-get install -y nodejs
-            node --version
-            python -m pip install --upgrade pip
-            python -m pip install -r requirements.txt --upgrade
-            python -m yt_dlp --version
+      - name: Install FFmpeg + Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          pip install -r requirements.txt
 
-      - name: Clean BAD cookies
-        run:
-          |
-            rm -f cookies.txt
-            echo "# V43 NO COOKIE - TV CLIENT" > cookies.txt
-
-      - name: Run MoviMoon V43
+      - name: Run Video Autoposter
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
           FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
           FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}
           FB_GROUP_ID: ${{ secrets.FB_GROUP_ID }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          YOUTUBE'CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
-          YOUTUBE_CLIENT_SECREV: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
-          YOUTUBE'REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
-          YOUTUBE_CHANNEL_ID: ${{ secrets.YOUTUBE'CHANNEL_ID }}
-        run:
-          |
-            python -u movimoon-video-autoposter.py
+        run: python movimoon-video-autoposter.py
 
-      - name: Commit history
-        if: always()
+      - name: Commit posted history (Prevent Repost)
         run: |
           git config --global user.name 'MoviMoon Bot'
           git config --global user.email 'bot@movimoon.online'
-          git add posted_history.json || true
-          git diff --staged --quiet || git commit -m "Update history V43 [skip ci]" || true
-          git push || true
+          git add posted_history.json || echo "No history file yet"
+          git diff --staged --quiet || git commit -m "Update posted history [skip ci]"
+          git push || echo "No changes to push"
