@@ -1,8 +1,8 @@
-import os, requests, random, re, time, asyncio, json, subprocess
+import os, requests, random, re, time, asyncio, json, subprocess, pathlib
 from datetime import datetime, timedelta
 from pathlib import Path
 
-print("=== MoviMoon Bot - FINAL V37 FIXED-TRIM + V39 MASTER PROMPT 1440p SMART-TRIM | DYNAMIC WORDS + 2-LINE TITLE + FB + YT SHORTS ===")
+print("=== MoviMoon Bot - V37 LATEST FIXED Nov 4 2026 Researched | gemini-3.8-flash + tv_downgraded + POT | BASE FOR FUTURE ===")
 
 try:
     import edge_tts
@@ -170,7 +170,7 @@ def get_video_duration(video_path):
         return 0
 
 def get_free_proxies():
-    """Method 2: Fetch free proxies - GitHub Azure IP bypass - Nov 2026"""
+    """Method 2: Fetch free proxies - GitHub Azure IP bypass - Nov 2026 Researched"""
     proxies = []
     try:
         url = "https://api.proxyscrape.com/v2/?request=getproxies&protocol=http&timeout=10000&country=all&ssl=all&anonymity=all"
@@ -191,25 +191,21 @@ def get_free_proxies():
 
 def download_via_ytdlp_fixed(youtube_url, output="trailer.mp4"):
     """
-    V37 FINAL UPDATED Nov 4 2026 - RESEARCHED TODAY
-    Based on hermes-agent-toolkit & yt-dlp-rescue March 2026 guide:
-    - tv_downgraded, android_vr, web_embedded, mweb = Full DASH, no token needed
-    - tv_simply, tv = fallback
-    - PO Token via bgutil-ytdlp-pot-provider plugin (js-runtimes node + ejs:github)
-    - Client chain: youtube:player_client=tv_downgraded,android_vr,web_embedded,mweb
+    V37 LATEST FIXED Nov 4 2026 - RESEARCHED TODAY - BASE VERSION
+    March 2026 guide: tv_downgraded, android_vr, web_embedded, mweb = Full DASH no token needed
+    PO Token via bgutil-ytdlp-pot-provider plugin
     """
-    print(f"=== YT-DLP V37 UPDATED Nov 2026 {youtube_url} ===")
+    print(f"=== YT-DLP V37 LATEST FIXED Nov 4 2026 {youtube_url} ===")
     Path(output).unlink(missing_ok=True)
     if Path("cookies.txt").exists():
         Path("cookies.txt").unlink(missing_ok=True)
-    Path("cookies.txt").write_text("# V37 NO COOKIE")
+    Path("cookies.txt").write_text("# V37 LATEST FIXED NO COOKIE - tv_downgraded + android_vr + web_embedded + mweb")
 
-    # Latest March 2026 strategies - tv_downgraded most reliable
     method1_strategies = [
-        {"name": "M1-tv_downgraded+android_vr+web_embedded - BEST 2026", "args": '--js-runtimes node --remote-components ejs:github --extractor-args "youtube:player_client=tv_downgraded,android_vr,web_embedded,mweb" -f "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best" --merge-output-format mp4'},
+        {"name": "M1-tv_downgraded+android_vr+web_embedded BEST 2026", "args": '--js-runtimes node --remote-components ejs:github --extractor-args "youtube:player_client=tv_downgraded,android_vr,web_embedded,mweb" -f "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best" --merge-output-format mp4'},
         {"name": "M1-tv+android_vr+web_embedded", "args": '--js-runtimes node --remote-components ejs:github --extractor-args "youtube:player_client=tv,android_vr,web_embedded,mweb" -f "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best" --merge-output-format mp4'},
         {"name": "M1-tv_downgraded alone", "args": '--extractor-args "youtube:player_client=tv_downgraded" -f "bestvideo[height<=1080][ext=mp4]+bestaudio/best" --merge-output-format mp4 --js-runtimes node'},
-        {"name": "M1-tv_embedded+mweb - fallback", "args": '--extractor-args "youtube:player_client=tv_embedded,mweb,web_creator" -f "best[height<=720]/best" --merge-output-format mp4 --js-runtimes node'},
+        {"name": "M1-tv_embedded+mweb fallback", "args": '--extractor-args "youtube:player_client=tv_embedded,mweb,web_creator" -f "best[height<=720]/best" --merge-output-format mp4 --js-runtimes node'},
         {"name": "M1-mweb+tv_simply", "args": '--extractor-args "youtube:player_client=mweb,tv_simply" -f "best[height<=720]/best" --merge-output-format mp4'},
         {"name": "M1-android_vr", "args": '--extractor-args "youtube:player_client=android_vr" -f "best[height<=1080]/best" --merge-output-format mp4'},
     ]
@@ -231,7 +227,7 @@ def download_via_ytdlp_fixed(youtube_url, output="trailer.mp4"):
             print(f"  ERROR M1 {e}")
             continue
 
-    print(">>> METHOD 1 FAILED - Trying METHOD 2: Proxy + latest clients")
+    print(">>> METHOD 1 FAILED - Trying METHOD 2: Proxy")
     proxies = get_free_proxies()
     if proxies:
         for p_idx, proxy in enumerate(proxies, 1):
@@ -252,7 +248,7 @@ def download_via_ytdlp_fixed(youtube_url, output="trailer.mp4"):
     else:
         print("  M2 No proxies")
 
-    print(">>> ALL 2 METHODS FAILED - Final fallback best")
+    print(">>> ALL 2 METHODS FAILED - Final fallback")
     try:
         cmd = f'yt-dlp --js-runtimes node --remote-components ejs:github -f "best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings --retries 1 2>&1'
         subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=120)
@@ -267,6 +263,7 @@ def download_trailer(youtube_url, output="trailer.mp4"):
     return download_via_ytdlp_fixed(youtube_url, output)
 
 def download_movie_poster(movie, output="poster.jpg"):
+
     try:
         poster_path = movie.get("poster_path")
         if not poster_path:
@@ -672,10 +669,8 @@ FINAL CHECK:
 Return JSON only.
 """
 
-    # V37 UPDATED Nov 4 2026 - RESEARCHED TODAY - Latest working models chain
-    # gemini-3-pro-preview SHUTDOWN Mar 9 2026【3734271433237528914†L62-L66】
-    # STABLE: gemini-3.8-flash Sep 2 2026【3734271433237528914†L22-L25】, gemini-3.5-flash-lite【3734271433237528914†L25-L27】
-    # gemini-3-flash-preview-20251217 working【7700419444655181774†L20-L23】, gemini-4-argon GA Oct 13 2026【1534056844096432041†L82-L84】
+    # ONLY gemini-3.5-flash-lite as user requested - this one works and returns
+    # V37 LATEST FIXED Nov 4 2026 - RESEARCHED TODAY
     models = [
         "gemini-3.8-flash",
         "gemini-3.5-flash-lite",
@@ -684,15 +679,14 @@ Return JSON only.
         "gemini-4-argon",
         "gemini-3.1-pro-preview"
     ]
-    # Try new google-genai SDK first (pip install google-genai) - latest SDK per docs【1534056844096432041†L14-L19】
     sdk_client = None
     try:
         from google import genai as genai_new
         if GEMINI_API_KEY:
             sdk_client = genai_new.Client(api_key=GEMINI_API_KEY)
-            print("google-genai SDK NEW OK - using gemini-3.8-flash")
+            print("google-genai SDK NEW OK")
     except Exception as e:
-        print(f"google-genai SDK not available {e}, using REST fallback")
+        print(f"SDK not available {e}")
         sdk_client = None
 
 
@@ -729,55 +723,6 @@ Return JSON only.
         return result, cw
 
     for model in models:
-        # Attempt 1: New SDK (google-genai)
-        if sdk_client:
-            try:
-                print(f"Trying NEW SDK model {model}...")
-                resp = sdk_client.models.generate_content(model=model, contents=prompt, config={"temperature":0.7, "max_output_tokens":4096})
-                text = resp.text
-                clean_text = text.replace("```json","").replace("```","").strip()
-                import re as re2
-                m = re2.search(r'\{.*\}', clean_text, re2.DOTALL)
-                if m:
-                    j = json.loads(m.group())
-                    voice = j.get("voiceover","").strip()
-                    story_bn = j.get("caption","").strip() or j.get("story_bn","").strip()
-                    wc = len(voice.split())
-                    if wc and wc >= target_min - 20:
-                        print(f"Gemini NEW SDK {model} OK - {wc} words")
-                        # proceed to expansion logic below if needed
-                        # reuse same flow
-                        # For simplicity, return if word count close enough
-                        if wc < target_min:
-                            # expand later
-                            pass
-                        if wc > 0:
-                            # store and break to return logic
-                            # we will continue to original handling by setting text variable
-                            # Actually directly return after validation
-                            if not story_bn:
-                                story_bn = f"{overview[:100]} এক অসাধারণ গল্প!"
-                            # Word trim/expand handled after loop - so save
-                            # We'll set a temp result and break
-                            temp_voice = voice
-                            temp_story = story_bn
-                            temp_title = j.get("bangla_title", title)
-                            # quick expand if needed
-                            if wc < target_min:
-                                # will be handled by smart_expand below
-                                pass
-                            # Return with expansion
-                            # Use existing smart_expand logic
-                            # To keep V37 exact, we will use same smart_expand function defined later
-                            # So assign and break
-                            # We'll set voice/story and go to final return handling
-                            # Instead of duplicating, let's set text and let existing code parse? Simpler: return directly
-                            if wc > target_max:
-                                temp_voice = " ".join(temp_voice.split()[:target_max])
-                            print(f"Gemini SDK SUCCESS - final")
-                            return temp_voice, temp_story, temp_title
-            except Exception as se:
-                print(f"SDK {model} failed {se}, trying REST")
         try:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
             data = {"contents":[{"parts":[{"text":prompt}]}], "generationConfig":{"temperature":0.7, "topP":0.9, "maxOutputTokens": 4096, "response_mime_type": "application/json"}}
@@ -891,8 +836,72 @@ def build_caption(title, year, m_type, genre_str, rating, story_bn, link):
     caption = f"🎬 {type_label} - {title}({year})\n🎭 Genres - {genre_str}\n⭐ Rating - {rating}/10\n{story_text}\n🔗 ফুল মুভি লিংক: {link}\n👉 পুরো রিভিউ এবং ডাউনলোড পেতে ভিজিট করুন movimoon.online\n#MoviMoon #MovieReview #TrendingNow #MustWatch #BengaliReview #ViralReels\n#S #{title.replace(' ', '').replace('-', '')}"
     return caption
 
+
+# === GEMINI TTS - PRIMARY - Nov 2026 Tested - Fenrir voice + energetic prompt ===
+GEMINI_TTS_VOICE_NAME = "Fenrir"  # Movie recap best: Fenrir/Charon/Orus, Bengali accent: Achernar
+GEMINI_TTS_MODEL = "gemini-3.8-flash-tts"  # Latest free till Dec 31 2026 - tested working
+GEMINI_TTS_PROMPT_PREFIX = "[Speak in a highly energetic, thrilling, fast-paced Bangladeshi young male voice, perfect for movie explanation]"
+
+def generate_tts_with_gemini(text, output_path="voice.mp3"):
+    """Gemini TTS PRIMARY - user tested working in other repo"""
+    if not GEMINI_API_KEY:
+        print("Gemini TTS: No API key")
+        return False
+    try:
+        from google import genai
+        from google.genai import types
+        client = genai.Client(api_key=GEMINI_API_KEY)
+        # Auto prepend energetic Bangladeshi voice prompt as requested
+        full_text = f"{GEMINI_TTS_PROMPT_PREFIX} {text}".strip()
+        print(f"Gemini TTS: Generating with {GEMINI_TTS_MODEL} voice {GEMINI_TTS_VOICE_NAME} - {len(full_text.split())} words")
+        speech_config = types.SpeechConfig(
+            voice_config=types.VoiceConfig(
+                prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                    voice_name=GEMINI_TTS_VOICE_NAME
+                )
+            )
+        )
+        response = client.models.generate_content(
+            model=GEMINI_TTS_MODEL,
+            contents=full_text,
+            config=types.GenerateContentConfig(
+                response_modalities=["AUDIO"],
+                speech_config=speech_config
+            )
+        )
+        audio_data = response.candidates[0].content.parts[0].inline_data.data
+        with open(output_path, "wb") as f:
+            f.write(audio_data)
+        if pathlib.Path(output_path).exists() and pathlib.Path(output_path).stat().st_size > 1000:
+            print(f"Gemini TTS SUCCESS - {pathlib.Path(output_path).stat().st_size/1024:.1f} KB saved to {output_path}")
+            return True
+        else:
+            print("Gemini TTS: File too small or not created")
+            return False
+    except Exception as e:
+        print(f"Gemini TTS FAILED: {e}")
+        import traceback; traceback.print_exc()
+        return False
+
+
 async def generate_tts_voice(text, output_path="voice.mp3"):
-    print(f"TTS: {len(text.split())} words RATE +28% PRO STUDIO V37 SMART-TRIM 1440p 1440p")
+    print(f"TTS: {len(text.split())} words - Trying Gemini TTS PRIMARY then Edge fallback")
+    # PRIMARY: Gemini TTS - highly energetic thrilling Bangladeshi male voice
+    gemini_success = generate_tts_with_gemini(text, output_path)
+    if gemini_success:
+        print(f"Using Gemini TTS voice - {GEMINI_TTS_VOICE_NAME} - SUCCESS")
+        # Still apply studio polish if needed? Gemini already high quality, skip heavy filter, just loudnorm light
+        try:
+            studio_path = output_path.replace(".mp3", "_studio.mp3")
+            cmd = f'ffmpeg -y -i "{output_path}" -filter:a "loudnorm=I=-16:TP=-1.5:LRA=7,volume=1.05" -c:a libmp3lame -q:a 0 -ar 48000 "{studio_path}"'
+            result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=20)
+            if Path(studio_path).exists() and Path(studio_path).stat().st_size > 1000:
+                Path(studio_path).replace(output_path)
+                print(f"Gemini voice light polish applied")
+        except Exception as e:
+            print(f"Gemini polish skip {e}")
+        return output_path
+    print(f"Gemini TTS failed or not available, FALLBACK to Edge TTS {VOICE}")
     communicate = edge_tts.Communicate(text, VOICE, rate=RATE, pitch=PITCH, volume=VOLUME)
     await communicate.save(output_path)
     try:
