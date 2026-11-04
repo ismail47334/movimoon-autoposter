@@ -1,18 +1,16 @@
-# MoviMoon AutoPoster - V2 FINAL - Video + Movie Picks Image
-# Core
+# MoviMoon AutoPoster - V40 FINAL - Video + Cookie Bot + YT Shorts
 requests
 edge-tts
 yt-dlp
 yt-dlp-ejs
 pillow
-
-# AI / LLM - NEW SDK + fallback
+bgutil-ytdlp-pot-provider
 groq
 google-genai
 google-generativeai
-
-# YouTube Shorts API
 google-api-python-client
 google-auth
 google-auth-oauthlib
 google-auth-httplib2
+playwright
+PyNaCl
