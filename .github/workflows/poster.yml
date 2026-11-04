@@ -1,8 +1,7 @@
-name: MoviMoon Video AutoPoster - Final
+name: MoviMoon V37 - 3 METHODS CHAIN - ClientDowngrade + Proxy + OAuth2
 
 on:
   schedule:
-    # BD Time: সকাল ১০টা, বিকাল ৩টা, রাত ৮টা
     - cron: '0 4 * * *'
     - cron: '0 9 * * *'
     - cron: '0 14 * * *'
@@ -12,35 +11,68 @@ jobs:
   post-videos:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Install FFmpeg + Dependencies
+      - name: Install FFmpeg + Node + yt-dlp + EJS - V37 3 METHODS
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg
-          pip install -r requirements.txt
+          sudo apt-get update -y
+          sudo apt-get install -y ffmpeg fonts-noto-core
+          curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+          sudo apt-get install -y nodejs
+          node --version
+          npm --version
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt --upgrade
+          python -m yt_dlp --version
+          pip list | grep -E "yt-dlp|requests"
 
-      - name: Run Video Autoposter
+      - name: Setup OAuth2 Token (Method 3) if secret exists
+        env:
+          YOUTUBE_OAUTH_JSON: ${{ secrets.YOUTUBE_OAUTH_JSON }}
+        run: |
+          if [ -n "$YOUTUBE_OAUTH_JSON" ]; then
+            echo "Method3 OAuth secret found, creating token file"
+            echo "$YOUTUBE_OAUTH_JSON" | base64 --decode > youtube_oauth_token.json 2>/dev/null || echo "$YOUTUBE_OAUTH_JSON" > youtube_oauth_token.json
+            ls -lh youtube_oauth_token.json
+            cat youtube_oauth_token.json | head -c 100
+            echo ""
+          else
+            echo "Method3 OAuth secret not set - will use Method1+2 only (this is normal)"
+            echo "To enable Method3: Locally run: yt-dlp --extractor-args youtube:oauth2=True https://www.youtube.com/watch?v=BaW_jenozKc and upload token to secret YOUTUBE_OAUTH_JSON"
+          fi
+          # Clean cookies - Method1 needs NO COOKIE
+          rm -f cookies.txt
+          echo "# V37 3 METHODS NO COOKIE" > cookies.txt
+          ls -lh
+
+      - name: Run MoviMoon V37 - 3 METHODS CHAIN
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
           FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
           FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}
           FB_GROUP_ID: ${{ secrets.FB_GROUP_ID }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: python movimoon-video-autoposter.py
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+          YOUTUBE_CHANNEL_ID: ${{ secrets.YOUTUBE_CHANNEL_ID }}
+          YOUTUBE_PROXY: ${{ secrets.YOUTUBE_PROXY }}
+          YOUTUBE_OAUTH_JSON: ${{ secrets.YOUTUBE_OAUTH_JSON }}
+          YOUTUBE_OAUTH_TOKEN_FILE: youtube_oauth_token.json
+        run: |
+          python -u movimoon-video-autoposter.py
 
-      - name: Commit posted history (Prevent Repost)
+      - name: Commit history
+        if: always()
         run: |
           git config --global user.name 'MoviMoon Bot'
           git config --global user.email 'bot@movimoon.online'
-          git add posted_history.json || echo "No history file yet"
-          git diff --staged --quiet || git commit -m "Update posted history [skip ci]"
-          git push || echo "No changes to push"
+          git add posted_history.json || true
+          git diff --staged --quiet || git commit -m "Update history V37 3 METHODS [skip ci]" || true
+          git push || true
