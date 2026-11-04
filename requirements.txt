@@ -1,10 +1,13 @@
-# MoviMoon AutoPoster - V40 FINAL - Video + Cookie Bot + YT Shorts
+# V41 ULTIMATE
 requests
 edge-tts
 yt-dlp
 yt-dlp-ejs
 pillow
 bgutil-ytdlp-pot-provider
+fastapi
+uvicorn[standard]
+httpx
 groq
 google-genai
 google-generativeai
@@ -14,3 +17,5 @@ google-auth-oauthlib
 google-auth-httplib2
 playwright
 PyNaCl
+websockets
+brotli
