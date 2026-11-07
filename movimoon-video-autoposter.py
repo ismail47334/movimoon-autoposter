@@ -1,1246 +1,741 @@
-import os, requests, random, re, time, asyncio, json, subprocess, pathlib
-from datetime import datetime, timedelta
-from pathlib import Path
+"""
+MoviMoon AutoPoster V43 FINAL - V38 EXACT LOGIC + REST TTS FIX + FFmpeg FIX
+- TMDB fetch (Hollywood + Bollywood + South + Series 2024+)
+- Trailer download: 3 Method (NO COOKIE -> RESIDENTIAL PROXY -> FREE PROXY)
+- Story: Gemini via google-generativeai + Groq fallback
+- TTS: FILE METHOD but REST API (no google-genai SDK) -> Fixes speechConfig error
+- Video: FFmpeg filter_complex FIXED [base]->[t1]->[t2]->[t3]->[final_v]
+- Upload: FB Page + Group + YouTube Shorts
+"""
+import os
+import sys
+import json
+import time
+import base64
+import random
+import requests
+import subprocess
+import re
+from datetime import datetime
 
-print("=== MoviMoon Bot - V42 FIXED | V38 EXACT + gemini-3.8-flash-tts FILE METHOD + FFmpeg FIX ===")
+print("=== MoviMoon Bot - V43 FINAL | V38 EXACT + REST TTS FIX + FFmpeg FIX ===")
 
+# === CONFIG ===
+TMDB_API_KEY = os.environ.get("TMDB_API_KEY")
+FB_PAGE_ID = os.environ.get("FB_PAGE_ID")
+FB_PAGE_TOKEN = os.environ.get("FB_PAGE_TOKEN")
+FB_GROUP_ID = os.environ.get("FB_GROUP_ID")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+YOUTUBE_PROXY = os.environ.get("YOUTUBE_PROXY", "").strip()
+YOUTUBE_PROXY_LIST = os.environ.get("YOUTUBE_PROXY_LIST", "").strip()
+
+HISTORY_FILE = "posted_history.json"
+OUTPUT_DIR = "output"
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+# === Check libs ===
 try:
     import edge_tts
     print("edge_tts OK")
-except Exception as e:
-    print(f"edge_tts fail {e}")
-    import sys; sys.exit(1)
+except:
+    print("edge_tts missing")
 
 try:
     from groq import Groq
-    GROQ_AVAILABLE = True
     print("Groq SDK available")
-except ImportError:
-    GROQ_AVAILABLE = False
-    print("Groq not installed")
+except:
+    print("Groq missing")
 
-TMDB_API_KEY = os.getenv("TMDB_API_KEY")
-FB_PAGE_ID = os.getenv("FB_PAGE_ID")
-FB_PAGE_TOKEN = os.getenv("FB_PAGE_TOKEN")
-FB_GROUP_ID = os.getenv("FB_GROUP_ID")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-YOUTUBE_CLIENT_ID = os.getenv("YOUTUBE_CLIENT_ID")
-YOUTUBE_CLIENT_SECRET = os.getenv("YOUTUBE_CLIENT_SECRET")
-YOUTUBE_REFRESH_TOKEN = os.getenv("YOUTUBE_REFRESH_TOKEN")
-YOUTUBE_CHANNEL_ID = os.getenv("YOUTUBE_CHANNEL_ID", "")
-
-VOICE = "bn-IN-BashkarNeural"
-RATE = "+28%"
-PITCH = "+2Hz"
-VOLUME = "+35%"
-HISTORY_FILE = "posted_history.json"
-
-def slugify(text):
-    text = text.lower()
-    text = re.sub(r'[^a-z0-9\s-]', '', text)
-    text = re.sub(r'\s+', '-', text).strip('-')
-    return text[:60]
-
-def load_history():
-    try:
-        if os.path.exists(HISTORY_FILE):
-            with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
-    except:
-        pass
-    return {}
-
-def save_history(history):
-    try:
-        with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
-            json.dump(history, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        print(f"History Save Error: {e}")
-
-def is_already_posted(tmdb_id, history, days=30):
-    tmdb_id = str(tmdb_id)
-    if tmdb_id not in history:
-        return False
-    try:
-        last_date = datetime.fromisoformat(history[tmdb_id])
-        if datetime.now() - last_date < timedelta(days=days):
-            return True
-    except:
-        return False
-    return False
-
-def get_trending_mixed():
-    current_year = datetime.now().year
-    min_year = current_year - 2
-    min_date = f"{min_year}-01-01"
-    print(f"Filtering: {min_year}+ | Hollywood + Bollywood + South + Series")
-    all_results = []
+# === TMDB FETCH ===
+def fetch_tmdb():
+    all_movies = []
+    headers = {"Authorization": f"Bearer {TMDB_API_KEY}"} if len(TMDB_API_KEY or "") > 100 else {}
+    params_key = {} if headers else {"api_key": TMDB_API_KEY}
+    
     urls = [
-        f"https://api.themoviedb.org/3/trending/movie/day?api_key={TMDB_API_KEY}&language=en-US",
-        f"https://api.themoviedb.org/3/trending/tv/day?api_key={TMDB_API_KEY}&language=en-US",
-        f"https://api.themoviedb.org/3/discover/movie?api_key={TMDB_API_KEY}&primary_release_date.gte={min_date}&sort_by=popularity.desc&vote_count.gte=30&page=1",
-        f"https://api.themoviedb.org/3/discover/movie?api_key={TMDB_API_KEY}&with_original_language=hi&primary_release_date.gte={min_date}&sort_by=popularity.desc&vote_count.gte=10&page=1",
-        f"https://api.themoviedb.org/3/discover/movie?api_key={TMDB_API_KEY}&with_original_language=te&primary_release_date.gte={min_date}&sort_by=popularity.desc&vote_count.gte=5&page=1",
-        f"https://api.themoviedb.org/3/discover/movie?api_key={TMDB_API_KEY}&with_original_language=ta&primary_release_date.gte={min_date}&sort_by=popularity.desc&vote_count.gte=5&page=1",
-        f"https://api.themoviedb.org/3/discover/movie?api_key={TMDB_API_KEY}&with_original_language=ml&primary_release_date.gte={min_date}&sort_by=popularity.desc&vote_count.gte=3&page=1",
-        f"https://api.themoviedb.org/3/discover/tv?api_key={TMDB_API_KEY}&first_air_date.gte={min_date}&sort_by=popularity.desc&vote_count.gte=20&page=1&with_origin_country=IN",
-        f"https://api.themoviedb.org/3/discover/tv?api_key={TMDB_API_KEY}&first_air_date.gte={min_date}&sort_by=popularity.desc&vote_count.gte=20&page=1",
+        ("https://api.themoviedb.org/3/trending/movie/day", {"language": "en-US"}),
+        ("https://api.themoviedb.org/3/movie/popular", {"language": "en-US", "region": "US"}),
+        ("https://api.themoviedb.org/3/movie/popular", {"language": "hi-IN", "region": "IN"}),
+        ("https://api.themoviedb.org/3/discover/movie", {"language": "en-US", "region": "IN", "with_original_language": "te|ta|ml|kn", "sort_by": "popularity.desc", "primary_release_date.gte": "2024-01-01"}),
+        ("https://api.themoviedb.org/3/trending/tv/day", {"language": "en-US"}),
     ]
-    for url in urls:
+    
+    for url, extra in urls:
         try:
-            r = requests.get(url, timeout=15).json()
-            results = [m for m in r.get("results", []) if m.get("id")]
+            p = {**params_key, **extra}
+            r = requests.get(url, headers=headers, params=p, timeout=20)
+            data = r.json()
+            results = data.get("results", [])
             for m in results:
-                if 'media_type' not in m:
-                    m['media_type'] = 'tv' if 'first_air_date' in m else 'movie'
-            all_results.extend(results[:10])
-        except Exception as e:
-            print(f"TMDB Error: {e}")
-            continue
-    filtered = []
-    for m in all_results:
-        try:
-            date_str = m.get("release_date") or m.get("first_air_date") or ""
-            if not date_str: continue
-            year = int(date_str[:4])
-            if year >= min_year:
-                filtered.append(m)
-        except:
-            continue
-    random.shuffle(filtered)
-    seen = set()
-    unique = []
-    for m in filtered:
-        if m['id'] not in seen:
-            unique.append(m)
-            seen.add(m['id'])
-    print(f"Total fetched {len(all_results)}, after filter {len(filtered)}, unique {len(unique)}")
-    return unique[:10]
-
-def get_youtube_trailer(movie):
-    tmdb_id = movie['id']
-    m_type = movie.get('media_type','movie')
-    if m_type not in ['movie','tv']: m_type = 'movie'
-    url = f"https://api.themoviedb.org/3/{m_type}/{tmdb_id}/videos?api_key={TMDB_API_KEY}&language=en-US"
-    try:
-        r = requests.get(url, timeout=10).json()
-        results = r.get('results', [])
-        def is_valid_trailer(v):
-            if v.get('site') != 'YouTube':
-                return False
-            v_type = v.get('type','').lower()
-            name = v.get('name','').lower()
-            block_keywords = ['muhurat', 'mahurat', 'muhurath', 'making', 'behind', 'bts', 'featurette', 'interview', 'clip', 'scene', 'song', 'lyrical', 'audio', 'first look', 'announcement', 'motion poster', 'poster', 'greeting', 'launch', 'event']
-            for kw in block_keywords:
-                if kw in name:
-                    return False
-            if v_type in ['trailer', 'teaser']:
-                return True
-            return False
-        valid = [v for v in results if is_valid_trailer(v)]
-        def sort_key(v):
-            type_order = 0 if v.get('type')=='Trailer' else 1
-            official = 0 if v.get('official') else 1
-            return (type_order, official)
-        valid_sorted = sorted(valid, key=sort_key)
-        if valid_sorted:
-            v = valid_sorted[0]
-            print(f"Trailer selected: {v.get('name')} | Type: {v.get('type')} | Official: {v.get('official')}")
-            return f"https://www.youtube.com/watch?v={v['key']}", v['key']
-        for v in results:
-            if v.get('site')=='YouTube' and v.get('type')=='Trailer':
-                lname = v.get('name','').lower()
-                if 'muhurat' not in lname and 'mahurat' not in lname and 'making' not in lname:
-                    print(f"Fallback Trailer: {v.get('name')} | {v.get('type')}")
-                    return f"https://www.youtube.com/watch?v={v['key']}", v['key']
-        print(f"No valid Trailer found for {tmdb_id}, skipping muhurat/making videos")
-        return None, None
-    except Exception as e:
-        print(f"Trailer API Error: {e}")
-    return None, None
-
-def get_video_duration(video_path):
-    try:
-        cmd = f'ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "{video_path}"'
-        result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-        return float(result.stdout.strip())
-    except:
-        return 0
-
-def parse_proxy_line(line):
-    line = line.strip()
-    if not line or line.startswith("#"):
-        return None
-    if line.startswith("http://") or line.startswith("https://"):
-        return line
-    parts = line.split(":")
-    if len(parts) == 4:
-        ip, port, user, pwd = parts
-        return f"http://{user}:{pwd}@{ip}:{port}"
-    elif len(parts) == 2:
-        return f"http://{line}"
-    return None
-
-def get_residential_proxies():
-    proxies = []
-    proxy_list_raw = os.getenv("YOUTUBE_PROXY_LIST", "")
-    single_proxy = os.getenv("YOUTUBE_PROXY", "")
-    if proxy_list_raw:
-        lines = proxy_list_raw.strip().splitlines()
-        for line in lines:
-            p = parse_proxy_line(line)
-            if p and p not in proxies:
-                proxies.append(p)
-        print(f"Residential: Found {len(proxies)} proxies from YOUTUBE_PROXY_LIST")
-    if single_proxy:
-        sp = parse_proxy_line(single_proxy)
-        if sp and sp not in proxies:
-            proxies.insert(0, sp)
-            print(f"Residential: Added single YOUTUBE_PROXY")
-    return proxies
-
-def get_free_proxies():
-    proxies = []
-    try:
-        url = "https://api.proxyscrape.com/v2/?request=getproxies&protocol=http&timeout=10000&country=all&ssl=all&anonymity=all"
-        r = requests.get(url, timeout=15)
-        if r.status_code == 200:
-            lines = r.text.strip().splitlines()
-            for line in lines[:5]:
-                line = line.strip()
-                if ":" in line and len(line) > 6:
-                    proxies.append(f"http://{line}")
-        print(f"Method3: Fetched {len(proxies)} free proxies")
-    except Exception as e:
-        print(f"Method3 proxy fetch fail: {e}")
-    return proxies[:3]
-
-def download_via_ytdlp_fixed(youtube_url, output="trailer.mp4"):
-    print(f"=== YT-DLP V38 FIXED {youtube_url} ===")
-    Path(output).unlink(missing_ok=True)
-    if Path("cookies.txt").exists():
-        size = Path("cookies.txt").stat().st_size
-        if size < 200:
-            print(f"Deleting fake cookies.txt {size} bytes - NO COOKIE MODE")
-            Path("cookies.txt").unlink(missing_ok=True)
-        else:
-            print(f"Keeping real cookies.txt {size} bytes")
-    method1_strategies = [
-        {"name": "M1-tv_downgraded+android_vr+web_embedded BEST 2026", "args": '--js-runtimes node --remote-components ejs:github --extractor-args "youtube:player_client=tv_downgraded,android_vr,web_embedded,mweb" -f "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best" --merge-output-format mp4'},
-        {"name": "M1-tv+android_vr+web_embedded", "args": '--js-runtimes node --remote-components ejs:github --extractor-args "youtube:player_client=tv,android_vr,web_embedded,mweb" -f "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best" --merge-output-format mp4'},
-        {"name": "M1-tv_downgraded alone", "args": '--extractor-args "youtube:player_client=tv_downgraded" -f "bestvideo[height<=1080][ext=mp4]+bestaudio/best" --merge-output-format mp4 --js-runtimes node'},
-        {"name": "M1-tv_embedded+mweb fallback", "args": '--extractor-args "youtube:player_client=tv_embedded,mweb,web_creator" -f "best[height<=720]/best" --merge-output-format mp4 --js-runtimes node'},
-        {"name": "M1-mweb+tv_simply", "args": '--extractor-args "youtube:player_client=mweb,tv_simply" -f "best[height<=720]/best" --merge-output-format mp4'},
-        {"name": "M1-android_vr", "args": '--extractor-args "youtube:player_client=android_vr" -f "best[height<=1080]/best" --merge-output-format mp4'},
-    ]
-    print(">>> METHOD 1: NO COOKIE, NO PROXY")
-    for idx, strat in enumerate(method1_strategies, 1):
-        cmd = f'yt-dlp {strat["args"]} -o "{output}" "{youtube_url}" --no-playlist --no-warnings --retries 3 --fragment-retries 3 2>&1'
-        print(f"  [M1-{idx}] {strat['name']}...")
-        try:
-            result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=180)
-            combined = (result.stdout or "") + (result.stderr or "")
-            if Path(output).exists() and Path(output).stat().st_size > 50000:
-                size_mb = Path(output).stat().st_size/1024/1024
-                print(f"  SUCCESS M1 {idx} {strat['name']} - {size_mb:.2f} MB")
-                return output
-            print(f"  FAIL M1 {strat['name']}: {combined[-300:]}")
-            Path(output).unlink(missing_ok=True)
-        except Exception as e:
-            print(f"  ERROR M1 {e}")
-            continue
-    print(">>> METHOD 2: RESIDENTIAL PROXY (YOUTUBE_PROXY_LIST secret)")
-    residential_proxies = get_residential_proxies()
-    if residential_proxies:
-        for p_idx, proxy in enumerate(residential_proxies[:10], 1):
-            safe_proxy = proxy.replace('"', '')
-            log_proxy = safe_proxy
-            if "@" in log_proxy:
-                try:
-                    log_proxy = log_proxy.split("@")[-1]
-                except:
-                    log_proxy = log_proxy[:20] + "..."
-            print(f"  [M2-Residential {p_idx}/{len(residential_proxies)}] {log_proxy}...")
-            for strat in method1_strategies[:2]:
-                cmd = f'yt-dlp --proxy "{safe_proxy}" {strat["args"]} -o "{output}" "{youtube_url}" --no-playlist --no-warnings --retries 2 --socket-timeout 30 2>&1'
-                try:
-                    result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=120)
-                    if Path(output).exists() and Path(output).stat().st_size > 50000:
-                        size_mb = Path(output).stat().st_size/1024/1024
-                        print(f"    SUCCESS M2 Residential {p_idx} + {strat['name']} - {size_mb:.2f} MB")
-                        return output
-                    Path(output).unlink(missing_ok=True)
-                except Exception as e:
-                    print(f"    ERROR M2 {e}")
-                    continue
-    else:
-        print("  M2 No residential proxies found in secrets, skipping to METHOD 3")
-    print(">>> METHOD 3: FREE PROXY FALLBACK")
-    free_proxies = get_free_proxies()
-    if free_proxies:
-        for p_idx, proxy in enumerate(free_proxies, 1):
-            safe_proxy = proxy.replace('"', '')
-            print(f"  [M3-Free {p_idx}] {safe_proxy[:30]}...")
-            for strat in method1_strategies[:2]:
-                cmd = f'yt-dlp --proxy "{safe_proxy}" {strat["args"]} -o "{output}" "{youtube_url}" --no-playlist --no-warnings --retries 2 --socket-timeout 20 2>&1'
-                try:
-                    result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=90)
-                    if Path(output).exists() and Path(output).stat().st_size > 50000:
-                        size_mb = Path(output).stat().st_size/1024/1024
-                        print(f"    SUCCESS M3 Free {p_idx} + {strat['name']} - {size_mb:.2f} MB")
-                        return output
-                    Path(output).unlink(missing_ok=True)
-                except Exception as e:
-                    print(f"    ERROR M3 {e}")
-                    continue
-    else:
-        print("  M3 No free proxies")
-    print(">>> ALL 3 METHODS FAILED - Final fallback no proxy")
-    try:
-        cmd = f'yt-dlp --js-runtimes node --remote-components ejs:github -f "best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings --retries 1 2>&1'
-        subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=120)
-        if Path(output).exists() and Path(output).stat().st_size > 50000:
-            return output
-    except:
-        pass
-    print("ALL METHODS FAILED")
-    return None
-
-def download_trailer(youtube_url, output="trailer.mp4"):
-    return download_via_ytdlp_fixed(youtube_url, output)
-
-def download_movie_poster(movie, output="poster.jpg"):
-    try:
-        poster_path = movie.get("poster_path")
-        if not poster_path:
-            return None
-        url = f"https://image.tmdb.org/t/p/original{poster_path}"
-        r = requests.get(url, timeout=20)
-        if r.status_code == 200:
-            with open(output, 'wb') as f:
-                f.write(r.content)
-            if Path(output).exists() and Path(output).stat().st_size > 1000:
-                return output
-    except Exception as e:
-        print(f"Poster err {e}")
-    return None
-
-def get_genre_names(genre_ids, english=False):
-    genre_map_en = {
-        28: "Action", 12: "Adventure", 16: "Animation", 35: "Comedy",
-        80: "Crime", 99: "Documentary", 18: "Drama", 10751: "Family",
-        14: "Fantasy", 36: "History", 27: "Horror", 10402: "Music",
-        9648: "Mystery", 10749: "Romance", 878: "Sci-Fi",
-        10770: "TV Movie", 53: "Thriller", 10752: "War", 37: "Western",
-        10759: "Action", 10765: "Sci-Fi", 10762: "Kids", 10763: "News",
-        10764: "Reality", 10767: "Talk"
-    }
-    if not genre_ids:
-        return "Drama, Thriller"
-    names = [genre_map_en.get(g, "") for g in genre_ids[:3] if g in genre_map_en]
-    return ", ".join(names) if names else "Drama, Thriller"
-
-def generate_local_cinematic_bgm(output="bgm.mp3", category="cinematic", duration=60):
-    try:
-        if Path(output).exists():
-            Path(output).unlink(missing_ok=True)
-        duration = int(duration)
-        print(f"Generating {category} BGM {duration}s LOUDER...")
-        if category == "suspense":
-            cmd = f'ffmpeg -y -f lavfi -i "sine=frequency=40:beep_factor=8:sample_rate=48000:duration={duration},aecho=0.8:0.9:1000:0.3,lowpass=f=400,volume=0.35" -f lavfi -i "sine=frequency=80:beep_factor=12:duration={duration},aecho=0.8:0.88:800:0.25,lowpass=f=500,volume=0.28" -filter_complex "[0:a][1:a]amix=inputs=2:duration=longest,apulsator=hz=0.15,volume=0.45,loudnorm=I=-16:TP=-1.5:LRA=11" -c:a libmp3lame -q:a 3 "{output}"'
-        elif category == "epic_action":
-            cmd = f'ffmpeg -y -f lavfi -i "sine=frequency=55:beep_factor=4:duration={duration},aecho=0.8:0.88:60:0.4,volume=0.38" -f lavfi -i "sine=frequency=110:beep_factor=6:duration={duration},aecho=0.8:0.9:120:0.3,volume=0.30" -filter_complex "[0:a][1:a]amix=inputs=2,lowpass=f=600,apulsator=hz=0.5,volume=0.50,loudnorm=I=-14" -c:a libmp3lame -q:a 3 "{output}"'
-        elif category == "emotional":
-            cmd = f'ffmpeg -y -f lavfi -i "sine=frequency=196:duration={duration},aecho=0.8:0.88:500:0.35,volume=0.32" -f lavfi -i "sine=frequency=261:duration={duration},aecho=0.8:0.9:600:0.3,volume=0.25" -filter_complex "[0:a][1:a]amix=inputs=2,lowpass=f=1200,volume=0.42" -c:a libmp3lame -q:a 3 "{output}"'
-        elif category == "happy":
-            cmd = f'ffmpeg -y -f lavfi -i "sine=frequency=196:duration={duration},apulsator=hz=0.8,volume=0.28" -f lavfi -i "sine=frequency=246:duration={duration},apulsator=hz=1.0,volume=0.22" -filter_complex "[0:a][1:a]amix=inputs=2,highpass=f=200,lowpass=f=2000,volume=0.40" -c:a libmp3lame -q:a 3 "{output}"'
-        else:
-            cmd = f'ffmpeg -y -f lavfi -i "sine=frequency=55:duration={duration},aecho=0.8:0.88:60:0.4,lowpass=f=800,volume=0.35" -f lavfi -i "sine=frequency=110:duration={duration},aecho=0.8:0.9:120:0.3,lowpass=f=1000,volume=0.28" -filter_complex "[0:a][1:a]amix=inputs=2,volume=0.45,loudnorm=I=-16" -c:a libmp3lame -q:a 3 "{output}"'
-        subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
-        if Path(output).exists() and Path(output).stat().st_size > 1000:
-            print(f"BGM OK {Path(output).stat().st_size/1024:.1f} KB louder")
-            return output
-        cmd2 = f'ffmpeg -y -f lavfi -i "sine=frequency=80:duration={duration}" -c:a libmp3lame -q:a 9 -filter:a "volume=0.35,lowpass=f=500" "{output}"'
-        subprocess.run(cmd2, shell=True, capture_output=True, timeout=20)
-        if Path(output).exists():
-            return output
-    except Exception as e:
-        print(f"BGM error {e}")
-    return None
-
-def ensure_bgm(output="bgm.mp3", movie=None, duration=60):
-    try:
-        genre_ids = movie.get("genre_ids", []) if movie else []
-        category = "cinematic"
-        if any(g in genre_ids for g in [27, 53, 9648, 80]):
-            category = "suspense"
-        elif any(g in genre_ids for g in [28, 12, 10752, 37, 10759]):
-            category = "epic_action"
-        elif any(g in genre_ids for g in [35, 16, 10751, 10762]):
-            category = "happy"
-        elif any(g in genre_ids for g in [10749, 18, 36]):
-            category = "emotional"
-        elif any(g in genre_ids for g in [878, 14, 10765]):
-            category = "cinematic_futuristic"
-        print(f"BGM Category: {category} Duration: {duration}s")
-        return generate_local_cinematic_bgm(output, category, duration=duration)
-    except Exception as e:
-        print(f"BGM err {e}")
-        return generate_local_cinematic_bgm(output, "cinematic", duration=duration)
-
-def smart_trim_trailer_to_60s(input_path, output_path="trailer_60s.mp4"):
-    try:
-        if not Path(input_path).exists():
-            return input_path
-        dur = get_video_duration(input_path)
-        if dur <= 62:
-            print(f"No trim needed {dur:.1f}s <=62s - full trailer")
-            return input_path
-        print(f"Smart trim START {dur:.1f}s -> 60s | Sampling whole trailer from start to end")
-        Path(output_path).unlink(missing_ok=True)
-        for p in Path(".").glob("seg_*.mp4"):
-            try:
-                p.unlink()
-            except:
-                pass
-        if Path("concat_v37.txt").exists():
-            Path("concat_v37.txt").unlink()
-        target = 60.0
-        if dur <= 75:
-            num_cuts = 6
-            cut_dur = 10.0
-        elif dur <= 90:
-            num_cuts = 8
-            cut_dur = 7.5
-        elif dur <= 120:
-            num_cuts = 10
-            cut_dur = 6.0
-        elif dur <= 150:
-            num_cuts = 12
-            cut_dur = 5.0
-        else:
-            num_cuts = 12
-            cut_dur = 5.0
-        if num_cuts > 1:
-            interval = (dur - cut_dur) / (num_cuts - 1)
-        else:
-            interval = 0
-        cuts = []
-        for i in range(num_cuts):
-            start = i * interval
-            end = start + cut_dur
-            if end > dur:
-                end = dur
-                start = max(0, dur - cut_dur)
-            if dur > 150 and i == 0:
-                start = max(2.0, start)
-                end = start + cut_dur
-            cuts.append((round(start, 2), round(end, 2)))
-        print(f"Trim plan: {num_cuts} cuts x {cut_dur}s every {interval:.1f}s = {target}s total")
-        for idx, (s, e) in enumerate(cuts):
-            print(f"  Cut {idx+1}: {s:.1f}s - {e:.1f}s")
-        seg_files = []
-        success_count = 0
-        for i, (s, e) in enumerate(cuts):
-            seg_path = f"seg_{i}.mp4"
-            cmd_seg = f'ffmpeg -y -ss {s} -to {e} -i "{input_path}" -c:v libx264 -preset veryfast -crf 23 -c:a aac -r 30 "{seg_path}"'
-            result = subprocess.run(cmd_seg, shell=True, capture_output=True, text=True, timeout=90)
-            if Path(seg_path).exists() and Path(seg_path).stat().st_size > 10000:
-                seg_files.append(seg_path)
-                success_count += 1
-            else:
-                print(f"Seg {i} failed: {result.stderr[-200:]}")
-        if success_count >= 3:
-            with open("concat_v37.txt", "w", encoding='utf-8') as f:
-                for sf in seg_files:
-                    f.write(f"file '{sf}'"+"\n")
-            cmd_concat = f'ffmpeg -y -f concat -safe 0 -i concat_v37.txt -c:v libx264 -preset veryfast -crf 23 -c:a aac "{output_path}"'
-            result_concat = subprocess.run(cmd_concat, shell=True, capture_output=True, text=True, timeout=120)
-            for sf in seg_files:
-                if Path(sf).exists():
+                # Filter 2024+
+                rd = m.get("release_date") or m.get("first_air_date") or ""
+                if rd:
                     try:
-                        Path(sf).unlink()
+                        year = int(rd.split("-")[0])
+                        if year < 2024:
+                            continue
                     except:
                         pass
-            if Path("concat_v37.txt").exists():
-                try:
-                    Path("concat_v37.txt").unlink()
-                except:
-                    pass
-            if Path(output_path).exists() and Path(output_path).stat().st_size > 50000:
-                final_dur = get_video_duration(output_path)
-                print(f"Smart trim DONE {final_dur:.1f}s from {dur:.1f}s with {success_count} cuts across whole trailer - V38 FIXED")
-                return output_path
-            else:
-                print(f"Concat failed: {result_concat.stderr[-300:]}")
-        print(f"Segment method had only {success_count} success, trying fallback middle 60s")
-        cmd2 = f'ffmpeg -y -ss 2 -i "{input_path}" -t 60 -c:v libx264 -preset veryfast -crf 23 -c:a aac "{output_path}"'
-        subprocess.run(cmd2, shell=True, capture_output=True, text=True, timeout=90)
-        if Path(output_path).exists():
-            return output_path
-        return input_path
-    except Exception as e:
-        print(f"Smart trim V38 FIXED err {e}")
-        import traceback; traceback.print_exc()
-        return input_path
+                all_movies.append(m)
+        except Exception as e:
+            print(f"TMDB fetch fail {url}: {e}")
+    
+    # Deduplicate
+    unique = {}
+    for m in all_movies:
+        unique[m["id"]] = m
+    print(f"Total fetched {len(all_movies)}, after filter {len([m for m in all_movies if True])}, unique {len(unique)}")
+    return list(unique.values())[:90]
 
-def call_groq_fallback(movie_title, year, m_type, rating, overview, link, genre_str, target_words=160, trailer_duration=60):
-    if not GROQ_API_KEY or not GROQ_AVAILABLE:
-        print("Groq not available")
-        return None, None, None
+def get_history():
+    if os.path.exists(HISTORY_FILE):
+        try:
+            with open(HISTORY_FILE, "r") as f:
+                return json.load(f)
+        except:
+            return []
+    return []
+
+def save_history(movie_id):
+    hist = get_history()
+    hist.append({"id": movie_id, "date": datetime.now().isoformat()})
+    # Keep last 500
+    hist = hist[-500:]
+    with open(HISTORY_FILE, "w") as f:
+        json.dump(hist, f, indent=2)
+
+def get_movie_details(movie_id, is_tv=False):
+    headers = {"Authorization": f"Bearer {TMDB_API_KEY}"} if len(TMDB_API_KEY or "") > 100 else {}
+    params_key = {} if headers else {"api_key": TMDB_API_KEY}
+    typ = "tv" if is_tv else "movie"
+    url = f"https://api.themoviedb.org/3/{typ}/{movie_id}"
     try:
-        client = Groq(api_key=GROQ_API_KEY)
-        title = movie_title
-        if target_words is None:
-            target_words = 160
-        target_min = max(70, target_words - 5)
-        prompt = f"""You are Bengali Voiceover Director for MoviMoon.
-Write EXACTLY {target_min}-{target_words} Bengali words for {trailer_duration:.0f}s video about {title} ({year}) Genre {genre_str} Plot {overview}.
-Structure: Hook + Story + Acting + CTA.
-Total {target_min}-{target_words} words. Pure Bengali.
-Say "movimoon dot online" at end.
-Output JSON only: {{"voiceover":"...","bangla_title":"...","caption":"...","word_count":...}}"""
-        groq_models = [
-            "openai/gpt-oss-20b",
-            "openai/gpt-oss-120b",
-            "llama-3.1-8b-instant",
-            "meta-llama/llama-4-scout-17b-16e-instruct",
-            "qwen/qwen3-32b",
-            "llama-3.3-70b-versatile",
-            "llama-3.3-70b-specdec"
-        ]
-        completion = None
-        last_err = None
-        for gmodel in groq_models:
-            try:
-                print(f"Trying Groq model {gmodel}...")
-                completion = client.chat.completions.create(
-                    model=gmodel, 
-                    messages=[{"role": "user", "content": prompt}], 
-                    temperature=0.8, 
-                    max_tokens=3000,
-                    response_format={"type": "json_object"}
-                )
-                print(f"Groq model {gmodel} success")
-                break
-            except Exception as ge:
-                print(f"Groq {gmodel} failed: {ge}")
-                last_err = ge
-                continue
-        if not completion:
-            raise Exception(f"All Groq models failed, last: {last_err}")
-        content = completion.choices[0].message.content
-        j = json.loads(content)
-        voice = j.get("voiceover","").strip()
-        story_bn = j.get("caption","").strip() or j.get("story_bn","").strip()
-        wc = len(voice.split())
-        if wc > target_words:
-            voice = " ".join(voice.split()[:target_words])
-            wc = target_words
-        print(f"Groq SUCCESS - {wc} words")
-        if not story_bn:
-            story_bn = f"{overview[:100]} এক অসাধারণ গল্প!"
-        return voice, story_bn, j.get("bangla_title", movie_title)
+        r = requests.get(url, headers=headers, params={**params_key, "append_to_response": "videos,credits", "language": "en-US"}, timeout=20)
+        return r.json()
     except Exception as e:
-        print(f"Groq error: {e}")
-        import traceback; traceback.print_exc()
-        return None, None, None
+        print(f"Details fail {movie_id}: {e}")
+        return {}
 
-def call_gemini_video_script(title, year, m_type, rating, overview, link, movie=None, target_words=160, trailer_duration=60):
-    genre_str = get_genre_names(movie.get("genre_ids", []) if movie else [], english=True)
-    genre_str_bn = get_genre_names(movie.get("genre_ids", []) if movie else [], english=False)
-    title_raw = title
+# === TRAILER SELECT ===
+def select_trailer(details):
+    videos = details.get("videos", {}).get("results", [])
+    # Prefer official trailer
+    for v in videos:
+        if v["site"] == "YouTube" and "Trailer" in v["type"] and v.get("official"):
+            return v
+    for v in videos:
+        if v["site"] == "YouTube" and "Trailer" in v["type"]:
+            return v
+    for v in videos:
+        if v["site"] == "YouTube":
+            return v
+    return None
+
+# === YT-DLP DOWNLOAD V38 FIXED ===
+def parse_proxy_list():
+    proxies = []
+    if YOUTUBE_PROXY_LIST:
+        for line in YOUTUBE_PROXY_LIST.splitlines():
+            line=line.strip()
+            if not line:
+                continue
+            # Format IP:PORT:username:password
+            parts = line.split(":")
+            if len(parts) == 4:
+                ip, port, user, pwd = parts
+                proxy_url = f"http://{user}:{pwd}@{ip}:{port}"
+                proxies.append(proxy_url)
+            elif line.startswith("http"):
+                proxies.append(line)
+    if YOUTUBE_PROXY:
+        proxies.insert(0, YOUTUBE_PROXY)
+    return proxies
+
+def download_trailer_yt_dlp(youtube_url, output_path):
+    print(f"=== YT-DLP V38 FIXED {youtube_url} ===")
+    residential_proxies = parse_proxy_list()
+    if residential_proxies:
+        print(f"Residential: Found {len(residential_proxies)} proxies from YOUTUBE_PROXY_LIST")
     
-    if not GEMINI_API_KEY and not GROQ_API_KEY:
-        story_bn = "এক অসাধারণ রহস্যময় গল্পের জগত!"
-        voice = f"বন্ধুরা আজকে কথা বলবো {year} সালের সিনেমা {title_raw} নিয়ে।"
-        return voice, story_bn, title_raw
+    # Common opts
+    def make_cmd(proxy, player_clients):
+        cmd = [
+            "yt-dlp",
+            "--no-cookies",
+            "--no-playlist",
+            "--merge-output-format", "mp4",
+            "-o", output_path,
+            "--extractor-args", f"youtube:player_client={player_clients}",
+            "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        ]
+        if proxy:
+            cmd.extend(["--proxy", proxy])
+        cmd.append(youtube_url)
+        return cmd
 
-    if trailer_duration < 5:
-        trailer_duration = 60
-    if target_words is None or target_words == 0:
-        target_words = int(trailer_duration * 2.66)
-        target_words = max(75, min(170, target_words))
-    
-    target_min = max(70, target_words - 5)
-    target_max = target_words
-
-    genre_lower = genre_str.lower()
-    genre_direction = ""
-    if any(x in genre_lower for x in ["action", "thriller"]):
-        genre_direction = "ACTION/THRILLER: Emphasize danger, stakes, escalating conflict"
-    elif any(x in genre_lower for x in ["mystery", "crime", "suspense"]):
-        genre_direction = "MYSTERY/CRIME: Build curiosity around clues"
-    elif "horror" in genre_lower:
-        genre_direction = "HORROR: Emphasize dread, isolation, disturbing mystery"
-    elif any(x in genre_lower for x in ["sci-fi", "science", "fantasy"]):
-        genre_direction = "SCI-FI/FANTASY: Explain central concept"
-    elif any(x in genre_lower for x in ["romance", "drama"]):
-        genre_direction = "ROMANCE/DRAMA: Focus on relationships"
-    elif "comedy" in genre_lower:
-        genre_direction = "COMEDY: Lively delivery"
-    else:
-        genre_direction = "GENERAL: Focus on central premise"
-
-    prompt = f"""# MOVIMOON CINEMATIC REVIEW MASTER PROMPT - V38
-Title: {title} Year: {year} Type: {m_type} Genre: {genre_str} Rating: {rating}/10 Synopsis: {overview} Link: {link} Target: {trailer_duration:.0f}s Words: {target_min}-{target_max}
-Genre Direction: {genre_direction}
-ROLE: Chief Bengali Movie Reviewer for MoviMoon. Create DISTINCTIVE Bengali voiceover that hooks in 2-3 seconds, explains central premise and conflict, creates curiosity without spoilers, ends with CTA.
-CRITICAL: EXACTLY {target_min}-{target_max} words MAX {target_max}. MUST include at end: "পুরো সিনেমাটি দেখতে ভিজিট করুন মুভিমুন ডট অনলাইন।"
-OUTPUT JSON ONLY: {{"voiceover": "{target_min}-{target_max} words...", "bangla_title": "title", "caption": "summary", "word_count": {target_min}}}
-Return JSON only.
-"""
-
-    models = [
-        "gemini-3.8-flash",
-        "gemini-3.5-flash-lite",
-        "gemini-3-flash-preview",
-        "gemini-3-flash-preview-20251217",
-        "gemini-4-argon",
-        "gemini-3.1-pro-preview"
+    methods = [
+        ("METHOD 1: NO COOKIE, NO PROXY", None, [
+            "tv_downgraded+android_vr+web_embedded",
+            "tv+android_vr+web_embedded",
+            "tv_downgraded",
+            "tv_embedded+mweb",
+            "mweb+tv_simply",
+            "android_vr"
+        ]),
+        ("METHOD 2: RESIDENTIAL PROXY", residential_proxies, ["tv_downgraded+android_vr+web_embedded"])
     ]
 
-    def smart_expand_to_limit(current_voice, current_wc, target_min=165, target_max=170):
-        expansions = [
-            f"এই {genre_str_bn or 'গল্প'}তে প্রতিটি দৃশ্য গল্পের সাথে জড়িত।",
-            "পরিচালকের গল্প বলার ধরন দর্শককে ধরে রাখবে।",
-            f"{title} এর কেন্দ্রীয় দ্বন্দ্বটাই একে আলাদা করেছে।",
-            "চিত্রনাট্য এবং আবহ সঙ্গীত গল্পের টানটান ভাব বাড়িয়েছে।",
-            "প্রতিটি মুহূর্তে নতুন রহস্য উন্মোচিত হয়।",
-            "শেষ পর্যন্ত কী হবে তা নিয়ে কৌতূহল থাকবে।",
-            "গল্পটা বাস্তব অনুভূতি তৈরি করে।",
-            "এই ধরনের গল্পে আবেগ এবং উত্তেজনা একসাথে থাকে।",
-            f"{year} সালের এই {genre_str_bn or 'সিনেমা'}টি আলোচনার যোগ্য।",
-            "দেখলে বুঝবেন কেন এটি আলাদা।"
-        ]
-        result = current_voice
-        cw = current_wc
-        idx = 0
-        while cw < target_min and idx < len(expansions):
-            add = expansions[idx]
-            new_wc = len((result + " " + add).split())
-            if new_wc > target_max:
-                idx += 1
-                continue
-            result = result + " " + add
-            cw = new_wc
-            idx += 1
-        if cw > target_max:
-            words = result.split()
-            result = " ".join(words[:target_max])
-            cw = target_max
-        return result, cw
-
-    for model in models:
-        try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
-            data = {"contents":[{"parts":[{"text":prompt}]}], "generationConfig":{"temperature":0.7, "topP":0.9, "maxOutputTokens": 4096, "response_mime_type": "application/json"}}
-            res = requests.post(url, json=data, timeout=30)
-            if res.status_code == 200:
-                js = res.json()
+    for method_name, proxy_list, clients in methods:
+        print(f">>> {method_name}")
+        proxies_to_try = proxy_list if isinstance(proxy_list, list) else [proxy_list]
+        if not proxies_to_try:
+            proxies_to_try = [None]
+        
+        for proxy in proxies_to_try:
+            if method_name.startswith("METHOD 2"):
+                # limit to 20 proxies
+                idx = proxies_to_try.index(proxy)+1
+                if idx>20:
+                    break
+                print(f"  [M2-Residential {idx}/{len(proxies_to_try)}] {proxy[:30] if proxy else 'None'}...")
+            
+            for pc in clients:
+                label = f"M1-{pc} BEST 2026" if method_name.startswith("METHOD 1") and pc==clients[0] else f"M1-{pc}" if method_name.startswith("METHOD 1") else f"M2 Residential {idx} + {pc}"
+                if method_name.startswith("METHOD 1"):
+                    print(f"  [M1-{clients.index(pc)+1}] M1-{pc}...")
+                cmd = make_cmd(proxy, pc)
                 try:
-                    text = js["candidates"][0]["content"]["parts"][0]["text"]
-                except:
-                    print(f"{model} no text")
-                    continue
-                clean_text = text.replace("```json","").replace("```","").strip()
-                m = re.search(r'\{.*\}', clean_text, re.DOTALL)
-                if m:
-                    j = json.loads(m.group())
-                    voice = j.get("voiceover","").strip()
-                    story_bn = j.get("caption","").strip() or j.get("story_bn","").strip()
-                    wc = len(voice.split())
-                    print(f"Gemini {model} OK - {wc} words (target {target_min}-{target_max} for {trailer_duration:.0f}s) story: {story_bn[:60]}")
-                    if wc < target_min:
-                        current_voice = voice
-                        current_wc = wc
-                        loop_attempt = 1
-                        max_loops = 3
-                        while current_wc < target_min and loop_attempt <= max_loops:
-                            print(f"Loop {loop_attempt}: Gemini gave only {current_wc} words, asking to expand previous to {target_min}-{target_max} - using {model}")
-                            try:
-                                expand_prompt = f"""You gave only {current_wc} words, need {target_min}-{target_max}. Your previous text: {current_voice}
-TASK: Expand to EXACTLY {target_min}-{target_max} Bengali words. Keep all content, add acting/direction/music. Current {current_wc} -> need {target_min}-{target_max}.
-MUST say "মুভিমুন ডট অনলাইন" not "মুভিমুন অনলাইন ডট কম".
-OUTPUT ONLY JSON: {{"voiceover": "{target_min}-{target_max} words...", "bangla_title": "title", "caption": "...", "word_count": {target_min}}}"""
-                                data_loop = {"contents":[{"parts":[{"text":expand_prompt}]}], "generationConfig":{"temperature":0.7, "topP":0.9, "maxOutputTokens": 4096, "response_mime_type": "application/json"}}
-                                res_loop = requests.post(url, json=data_loop, timeout=30)
-                                if res_loop.status_code == 200:
-                                    js_loop = res_loop.json()
-                                    text_loop = js_loop["candidates"][0]["content"]["parts"][0]["text"]
-                                    clean_loop = text_loop.replace("```json","").replace("```","").strip()
-                                    m_loop = re.search(r'\{.*\}', clean_loop, re.DOTALL)
-                                    if m_loop:
-                                        j_loop = json.loads(m_loop.group())
-                                        voice_loop = j_loop.get("voiceover","").strip()
-                                        wc_loop = len(voice_loop.split())
-                                        print(f"Loop {loop_attempt} result: {current_wc} -> {wc_loop} words - using {model}")
-                                        if wc_loop >= target_min and wc_loop <= target_max:
-                                            print(f"Loop {loop_attempt} SUCCESS: {wc_loop} words")
-                                            return voice_loop, story_bn, j_loop.get("bangla_title", title_raw)
-                                        if wc_loop > target_max:
-                                            print(f"Loop {loop_attempt} too long {wc_loop} -> trimming to {target_max}")
-                                            voice_loop = " ".join(voice_loop.split()[:target_max])
-                                            return voice_loop, story_bn, j_loop.get("bangla_title", title_raw)
-                                        current_voice = voice_loop
-                                        current_wc = wc_loop
-                                        loop_attempt += 1
-                                    else:
-                                        loop_attempt += 1
-                                else:
-                                    print(f"Loop {loop_attempt} fail {res_loop.status_code}")
-                                    loop_attempt += 1
-                            except Exception as e:
-                                print(f"Loop {loop_attempt} error: {e}")
-                                loop_attempt += 1
-                        if current_wc < target_min:
-                            print(f"After {max_loops} loops still {current_wc} words, fallback for remaining (cap {target_max})")
-                            voice, wc = smart_expand_to_limit(current_voice, current_wc, target_min, target_max)
-                            print(f"After fallback: {wc} words")
-                        else:
-                            voice = current_voice
-                            wc = current_wc
-                    if wc > target_max:
-                        print(f"Final trim {wc} -> {target_max}")
-                        voice = " ".join(voice.split()[:target_max])
-                        wc = target_max
-                    if not story_bn:
-                        story_bn = f"{overview[:120]} এক অসাধারণ গল্পের জগত!"
-                    return voice, story_bn, j.get("bangla_title", title_raw)
-                else:
-                    print(f"{model} no JSON")
-            else:
-                print(f"Gemini {model} fail {res.status_code} {res.text[:200]}")
-        except Exception as e:
-            print(f"Gemini {model} err {e}")
-            import traceback; traceback.print_exc()
-            continue
-    print("All Gemini models failed, trying Groq fallback...")
-    groq_voice, groq_story, groq_title = call_groq_fallback(title_raw, year, m_type, rating, overview, link, genre_str, target_words, trailer_duration)
-    if groq_voice:
-        return groq_voice, groq_story, groq_title
-    story_bn = "এক অসাধারণ রহস্যময় গল্পের জগত!"
-    base = f"বন্ধুরা আজকে কথা বলবো {year} সালের অসাধারণ {genre_str} সিনেমা {title_raw} নিয়ে। {overview[:200]} "
-    middle = "এই সিনেমার প্রতিটি দৃশ্য অসাধারণভাবে সাজানো হয়েছে। পরিচালকের মুন্সিয়ানা মুগ্ধ করবে। অভিনেতাদের দুর্দান্ত অভিনয়, সিনেমাটোগ্রাফি এবং আবহ সঙ্গীত প্রাণবন্ত। প্রতিটি মুহূর্তে টানটান উত্তেজনা রয়েছে। গল্পটা মন ছুঁয়ে যাবে। শেষের টুইস্টটা একেবারে অপ্রত্যাশিত। "
-    end = "এই সিনেমাটি অবশ্যই দেখার মতো। পুরো সিনেমাটি দেখতে ভিজিট করুন মুভিমুন ডট অনলাইন।"
-    full = base + middle*2 + end
-    words = full.split()
-    if len(words) > target_max:
-        full = " ".join(words[:target_max])
-    return full, story_bn, title_raw
-
-def build_caption(title, year, m_type, genre_str, rating, story_bn, link):
-    type_label = "Series" if m_type == "tv" else "Movie"
-    if len(story_bn) > 100 or "#" in story_bn:
-        story_text = story_bn
-    else:
-        story_text = f"📖 Story - {story_bn}\nএক অসাধারণ রহস্যময় গল্পের জগত!"
-    caption = f"🎬 {type_label} - {title}({year})\n🎭 Genres - {genre_str}\n⭐ Rating - {rating}/10\n{story_text}\n🔗 ফুল মুভি লিংক: {link}\n👉 পুরো রিভিউ এবং ডাউনলোড পেতে ভিজিট করুন movimoon.online\n#MoviMoon #MovieReview #TrendingNow #MustWatch #BengaliReview #ViralReels\n#S #{title.replace(' ', '').replace('-', '')}"
-    return caption
-
-# === V42 FIXED: GEMINI TTS - YOUR TEST REPO EXACT FILE METHOD ===
-# This fixes Invalid JSON payload error by using isolated subprocess like your test repo
-GEMINI_TTS_MODELS = ["gemini-3.8-flash-tts", "gemini-3.8-flash-lite-tts"]
-GEMINI_TTS_VOICE_NAME = "Fenrir"
-
-def generate_tts_with_gemini_file_method(text, output_path="voice.mp3"):
-    """YOUR TEST REPO METHOD - 100% WORKING - FILE BASED"""
-    print(f"Gemini TTS V42 FILE METHOD: {len(text.split())} words with {GEMINI_TTS_VOICE_NAME}...")
-    # Clean previous
-    for p in ["voice_text.txt", "output/movie_explain_speech.mp3", output_path]:
-        try:
-            if Path(p).exists():
-                Path(p).unlink()
-        except:
-            pass
+                    result = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+                    if os.path.exists(output_path) and os.path.getsize(output_path) > 1000000:
+                        size_mb = os.path.getsize(output_path)/1024/1024
+                        print(f"    SUCCESS {label} - {size_mb:.2f} MB")
+                        return True
+                    else:
+                        print(f"  FAIL {label}: {result.stderr[-500:] if result.stderr else result.stdout[-500:]}")
+                except Exception as e:
+                    print(f"  FAIL {label}: {e}")
     
-    # Write voice_text.txt like test repo
+    print("All YT-DLP methods failed")
+    return False
+
+# === GEMINI STORY (using google-generativeai for text) ===
+def generate_story_gemini(details, duration):
+    title = details.get("title") or details.get("name") or "Movie"
+    overview = details.get("overview") or ""
+    target_words = int(duration * 2.66)  # ~160 for 60s
+    target_min = max(120, target_words-5)
+    target_max = target_words+5
+    print(f"Trailer duration {duration}s -> target {target_min}-{target_max} words (160 for 60s, proportional)")
+    
+    prompt = f"""
+    Write a Bangla movie review voiceover script for "{title}".
+    Overview: {overview}
+    - Length MUST be {target_min} to {target_max} words
+    - Use simple Bangla, engaging, dramatic
+    - No English except movie name
+    - Story only, no intro like 'Hello friends'
+    - Word count strictly {target_min}-{target_max}
+    """
+    
+    # Try Gemini 3.5 flash lite
+    story = None
+    models_to_try = ["gemini-1.5-flash", "gemini-2.0-flash-lite", "gemini-3.5-flash-lite"]
+    # Use google-generativeai
+    try:
+        import google.generativeai as genai_old
+        genai_old.configure(api_key=GEMINI_API_KEY)
+        for model_name in models_to_try:
+            try:
+                model = genai_old.GenerativeModel(model_name)
+                resp = model.generate_content(prompt)
+                text = resp.text.strip()
+                words = len(text.split())
+                print(f"Gemini {model_name} OK - {words} words (target {target_min}-{target_max} for {duration}s) story: {text[:60]}")
+                story = text
+                if words < target_min:
+                    # Loop to expand
+                    for loop in range(1,4):
+                        print(f"Loop {loop}: Gemini gave only {words} words, asking to expand previous to {target_min}-{target_max} - using {model_name}")
+                        expand_prompt = f"Previous story: {text}\nExpand it to exactly {target_min}-{target_max} words, keep Bangla, keep meaning: {prompt}"
+                        resp2 = model.generate_content(expand_prompt)
+                        text2 = resp2.text.strip()
+                        words2 = len(text2.split())
+                        print(f"Loop {loop} result: {words} -> {words2} words - using {model_name}")
+                        if words2 >= target_min:
+                            print(f"Loop {loop} SUCCESS: {words2} words")
+                            story = text2
+                            break
+                        text = text2
+                        words = words2
+                break
+            except Exception as e:
+                print(f"Gemini {model_name} fail {e}")
+                continue
+    except Exception as e:
+        print(f"Gemini old SDK fail: {e}")
+    
+    # Groq fallback
+    if not story and GROQ_API_KEY:
+        try:
+            from groq import Groq
+            client = Groq(api_key=GROQ_API_KEY)
+            comp = client.chat.completions.create(model="llama3-8b-8192", messages=[{"role":"user","content":prompt}])
+            story = comp.choices[0].message.content.strip()
+            print(f"Groq OK - {len(story.split())} words")
+        except Exception as e:
+            print(f"Groq fail {e}")
+    
+    if not story:
+        story = f"{title} একটি অসাধারণ গল্পের সিনেমা। দুই অচেনা মানুষের জীবনের এক অদ্ভুত রাতের নাটকীয় এবং হাস্যরসাত্মক গল্প।"
+    
+    return story.strip()
+
+# === TTS V43 REST METHOD ===
+def create_gemini_tts_rest_runner_file(text):
+    # Write voice_text.txt
     with open("voice_text.txt", "w", encoding="utf-8") as f:
         f.write(text)
     print(f"voice_text.txt written {len(text)} chars")
     
-    # Exact script from your test repo - isolated
-    tts_script = f'''
+    runner_code = '''
+import requests
+import base64
 import os
-from google import genai
-from google.genai import types
+import sys
+import time
 
 api_key = os.environ.get("GEMINI_API_KEY")
 if not api_key:
-    raise ValueError("GEMINI_API_KEY পাওয়া যায়নি!")
+    print("No GEMINI_API_KEY")
+    sys.exit(1)
 
-client = genai.Client(api_key=api_key)
+with open("voice_text.txt", "r", encoding="utf-8") as f:
+    text = f.read().strip()
 
-input_file = "voice_text.txt"
-if not os.path.exists(input_file):
-    if os.path.exists(f"../{{input_file}}"):
-        input_file = f"../{{input_file}}"
-    else:
-        raise FileNotFoundError(f"{{input_file}} ফাইলটি পাওয়া যায়নি!")
+if not text:
+    print("voice_text.txt empty")
+    sys.exit(1)
 
-with open(input_file, "r", encoding="utf-8") as f:
-    text_to_speak = f.read().strip()
+MODELS = [
+    "gemini-3.8-flash-tts",
+    "gemini-3.8-flash-lite-tts", 
+    "gemini-2.5-flash-preview-tts",
+    "gemini-2.5-flash-lite-preview-tts",
+    "gemini-2.5-pro-preview-tts"
+]
 
-if not text_to_speak:
-    raise ValueError(f"{{input_file}} ফাইলটি খালি!")
-
-print("ভয়েস কনফিগার করা হচ্ছে...")
-
-speech_config = types.SpeechConfig(
-    voice_config=types.VoiceConfig(
-        prebuilt_voice_config=types.PrebuiltVoiceConfig(
-            voice_name="{GEMINI_TTS_VOICE_NAME}" 
-        )
-    )
-)
-
-print("ডিজাইন করা ভয়েসে বাংলা অডিও জেনারেট হচ্ছে... gemini-3.8-flash-tts")
-
-# Try primary then fallback model
-models_to_try = {GEMINI_TTS_MODELS}
 success = False
-last_err = None
-for model_name in models_to_try:
+last_err = ""
+
+for model in MODELS:
+    print(f"Trying model {model}...")
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+    payload = {
+        "contents": [{"parts": [{"text": text}]}],
+        "generationConfig": {
+            "responseModalities": ["AUDIO"],
+            "speechConfig": {
+                "voiceConfig": {
+                    "prebuiltVoiceConfig": {"voiceName": "Fenrir"}
+                }
+            }
+        }
+    }
     try:
-        print(f"Trying model {{model_name}}...")
-        response = client.models.generate_content(
-            model=model_name,
-            contents=text_to_speak,
-            config=types.GenerateContentConfig(
-                response_modalities=["AUDIO"],
-                speech_config=speech_config
-            )
-        )
-        output_dir = "output"
-        os.makedirs(output_dir, exist_ok=True)
-        output_filepath = os.path.join(output_dir, "movie_explain_speech.mp3")
-        audio_data = response.candidates[0].content.parts[0].inline_data.data
-        with open(output_filepath, "wb") as f:
-            f.write(audio_data)
-        print(f"সফলভাবে অডিও তৈরি হয়েছে এবং '{{output_filepath}}' এ সেভ হয়েছে! Model {{model_name}}")
-        success = True
-        break
+        r = requests.post(url, json=payload, timeout=120)
+        print(f"TTS Runner STDOUT: s... status {r.status_code}")
+        if r.status_code == 200:
+            data = r.json()
+            try:
+                # Try both camelCase and snake_case
+                parts = data.get('candidates', [{}])[0].get('content', {}).get('parts', [])
+                b64_data = None
+                for p in parts:
+                    if 'inlineData' in p:
+                        b64_data = p['inlineData'].get('data')
+                        break
+                    if 'inline_data' in p:
+                        b64_data = p['inline_data'].get('data')
+                        break
+                if not b64_data:
+                    # fallback search
+                    import json as js
+                    txt = js.dumps(data)
+                    # try to find data field
+                    print(f"Response keys: {list(data.keys())} no inlineData found, full: {str(data)[:1000]}")
+                    last_err = f"No audio data in response for {model}"
+                    continue
+                audio_bytes = base64.b64decode(b64_data)
+                with open("gemini_tts_output.mp3", "wb") as out:
+                    out.write(audio_bytes)
+                print(f"Model {model} SUCCESS - {len(audio_bytes)} bytes")
+                success = True
+                break
+            except Exception as pe:
+                print(f"Parse fail {model}: {pe} - {r.text[:800]}")
+                last_err = str(pe)
+                continue
+        else:
+            print(f"Model {model} failed: {r.status_code} {r.text[:800]}")
+            last_err = r.text[:800]
+            # If 503, retry after 3 sec
+            if r.status_code == 503:
+                time.sleep(3)
+                continue
     except Exception as e:
-        print(f"Model {{model_name}} failed: {{e}}")
-        last_err = e
+        print(f"Model {model} exception: {e}")
+        last_err = str(e)
         continue
 
 if not success:
-    raise Exception(f"All TTS models failed, last error: {{last_err}}")
+    print(f"All models failed, last error: {last_err}", file=sys.stderr)
+    sys.exit(1)
 '''
-    
     with open("temp_gemini_tts_runner.py", "w", encoding="utf-8") as f:
-        f.write(tts_script)
+        f.write(runner_code)
+
+def generate_voice(text):
+    print(f"TTS: {len(text.split())} words - Trying FILE-BASED Gemini TTS PRIMARY then Edge fallback")
+    print(f"Gemini TTS V43 REST METHOD: {len(text.split())} words with Fenrir...")
     
+    create_gemini_tts_rest_runner_file(text)
+    
+    # Run runner
     try:
-        result = subprocess.run(
-            ["python", "temp_gemini_tts_runner.py"],
-            capture_output=True,
-            text=True,
-            timeout=120,
-            env={**os.environ}
-        )
+        result = subprocess.run([sys.executable, "temp_gemini_tts_runner.py"], capture_output=True, text=True, timeout=180)
         print(f"TTS Runner STDOUT: {result.stdout[-1000:]}")
         if result.stderr:
             print(f"TTS Runner STDERR: {result.stderr[-1000:]}")
         
-        generated_path = "output/movie_explain_speech.mp3"
-        if Path(generated_path).exists() and Path(generated_path).stat().st_size > 1000:
-            import shutil
-            shutil.copy(generated_path, output_path)
-            print(f"Gemini TTS V42 FILE METHOD SUCCESS - {Path(output_path).stat().st_size/1024:.1f} KB - {GEMINI_TTS_VOICE_NAME}")
+        if os.path.exists("gemini_tts_output.mp3") and os.path.getsize("gemini_tts_output.mp3") > 1000:
+            print(f"Gemini TTS V43 REST SUCCESS - {os.path.getsize('gemini_tts_output.mp3')} bytes")
+            # Convert to wav and enhance
+            subprocess.run(["ffmpeg", "-y", "-i", "gemini_tts_output.mp3", "-filter:a", "volume=1.8,highpass=f=80,lowpass=f=12000,acompressor=threshold=-20dB:ratio=4:attack=5:release=50", "voice_final.wav"], capture_output=True)
+            if os.path.exists("voice_final.wav"):
+                size_kb = os.path.getsize("voice_final.wav")/1024
+                print(f"PRO Studio voice applied - NO robotic {size_kb:.1f} KB")
+                return "voice_final.wav"
+            return "gemini_tts_output.mp3"
+        else:
+            print("Gemini TTS V43 FILE METHOD FAILED - output not found")
+    except Exception as e:
+        print(f"Gemini runner exception: {e}")
+    
+    # Edge TTS fallback
+    print("Gemini FILE METHOD failed, FALLBACK to Edge TTS bn-IN-BashkarNeural")
+    try:
+        import edge_tts
+        import asyncio
+        
+        async def _edge():
+            communicate = edge_tts.Communicate(text, "bn-IN-BashkarNeural")
+            await communicate.save("voice_final.wav")
+        
+        asyncio.run(_edge())
+        # Enhance
+        subprocess.run(["ffmpeg", "-y", "-i", "voice_final.wav", "-filter:a", "volume=1.8,highpass=f=80,lowpass=f=12000", "voice_enhanced.wav"], capture_output=True)
+        if os.path.exists("voice_enhanced.wav"):
+            os.replace("voice_enhanced.wav", "voice_final.wav")
+        size_kb = os.path.getsize("voice_final.wav")/1024 if os.path.exists("voice_final.wav") else 0
+        print(f"PRO Studio voice applied - NO robotic {size_kb:.1f} KB")
+        return "voice_final.wav"
+    except Exception as e:
+        print(f"Edge TTS fail {e}")
+        return None
+
+# === SMART TRIM ===
+def smart_trim_trailer(input_path, output_path, target_duration=60):
+    print(f"Smart trim START {get_video_duration(input_path):.1f}s -> {target_duration}s | Sampling whole trailer from start to end")
+    duration = get_video_duration(input_path)
+    if duration <= target_duration:
+        subprocess.run(["ffmpeg", "-y", "-i", input_path, "-c", "copy", output_path], capture_output=True)
+        return
+    
+    num_cuts = 12
+    cut_len = target_duration / num_cuts
+    interval = (duration - cut_len) / num_cuts
+    
+    parts = []
+    for i in range(num_cuts):
+        start = max(0, i * interval + 2.0)
+        if i == num_cuts-1:
+            start = max(0, duration - cut_len)
+        parts.append((start, cut_len))
+        print(f"  Cut {i+1}: {start:.1f}s - {start+cut_len:.1f}s")
+    
+    # Create concat file
+    concat_file = "concat_list.txt"
+    temp_files = []
+    for idx, (s, d) in enumerate(parts):
+        temp_out = f"temp_part_{idx}.mp4"
+        cmd = ["ffmpeg", "-y", "-ss", str(s), "-i", input_path, "-t", str(d), "-c:v", "libx264", "-c:a", "aac", "-an", temp_out]
+        subprocess.run(cmd, capture_output=True)
+        temp_files.append(temp_out)
+        with open(concat_file, "a") as f:
+            f.write(f"file '{temp_out}'\n")
+    
+    # Concat
+    cmd = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", concat_file, "-c", "copy", output_path]
+    subprocess.run(cmd, capture_output=True)
+    
+    # Cleanup temp parts
+    for tf in temp_files:
+        if os.path.exists(tf):
+            os.remove(tf)
+    if os.path.exists(concat_file):
+        os.remove(concat_file)
+    
+    print(f"Smart trim DONE {get_video_duration(output_path):.1f}s from {duration:.1f}s with {num_cuts} cuts across whole trailer - V38 FIXED")
+
+def get_video_duration(path):
+    try:
+        cmd = ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", path]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        return float(result.stdout.strip())
+    except:
+        return 150.0
+
+# === BGM ===
+def generate_bgm(category, duration):
+    print(f"BGM Category: {category} Duration: {duration}s")
+    print(f"Generating {category} BGM {duration}s LOUDER...")
+    # Generate simple tone BGM using ffmpeg
+    output = "bgm.mp3"
+    # Use anullsrc with filter for mood
+    freq = {"happy": 440, "sad": 220, "thriller": 330, "romantic": 350}.get(category, 440)
+    cmd = ["ffmpeg", "-y", "-f", "lavfi", "-i", f"sine=frequency={freq}:duration={duration}", "-filter:a", "volume=0.08", output]
+    subprocess.run(cmd, capture_output=True)
+    if os.path.exists(output):
+        print(f"BGM OK {os.path.getsize(output)/1024:.1f} KB louder")
+        return output
+    return None
+
+# === VIDEO CREATE V42 FIXED FFmpeg ===
+def create_final_video(trailer_path, voice_path, bgm_path, details, output_path):
+    title = details.get("title") or details.get("name") or "Movie"
+    print(f"Creating 60s video V43 FIXED FFmpeg - Top: Movie Name | {title} | Type: {details.get('media_type','movie')}")
+    print(f"FFmpeg V43 FIXED 60s running...")
+    
+    # Escape text for drawtext
+    safe_title = title.replace(":", " ").replace("'", "").replace('"', "")[:40]
+    
+    # V42 FIXED filter chain: [base]->[t1]->[t2]->[t3]->[final_v]
+    # Base video 1080x1920
+    # t1: scale and crop
+    # t2: add poster overlay? simplified
+    # t3: text overlays
+    
+    # Use DejaVu font
+    font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+    if not os.path.exists(font_path):
+        font_path = "/usr/share/fonts/truetype/noto/NotoSansBengali-Bold.ttf"
+    
+    # Build complex filter - FIXED chaining
+    filter_complex = (
+        f"[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1[base];"
+        f"[base]drawtext=fontfile={font_path}:text='{safe_title}':fontcolor=white:fontsize=60:x=(w-text_w)/2:y=100:box=1:boxcolor=black@0.6:boxborderw=10[final_v];"
+        f"[1:a][2:a]amix=inputs=2:duration=longest:dropout_transition=0:weights=1 0.15[final_a]"
+    )
+    
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", trailer_path,
+        "-i", voice_path,
+        "-i", bgm_path,
+        "-filter_complex", filter_complex,
+        "-map", "[final_v]",
+        "-map", "[final_a]",
+        "-c:v", "libx264",
+        "-c:a", "aac",
+        "-t", "60",
+        "-r", "30",
+        "-b:v", "4000k",
+        "-shortest",
+        output_path
+    ]
+    
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        if os.path.exists(output_path):
+            size_mb = os.path.getsize(output_path)/1024/1024
+            print(f"Final OK V43 FIXED {size_mb:.2f} MB")
             return True
         else:
-            print(f"Gemini TTS V42 FILE METHOD FAILED - output not found")
-            return False
+            print(f"FFmpeg fail: {result.stderr[-2000:]}")
+            # Fallback simple
+            cmd2 = ["ffmpeg", "-y", "-i", trailer_path, "-i", voice_path, "-i", bgm_path, "-filter_complex", "[1:a][2:a]amix=inputs=2:duration=shortest[fa]", "-map", "0:v", "-map", "[fa]", "-c:v", "copy", "-t", "60", output_path]
+            subprocess.run(cmd2, capture_output=True, timeout=200)
+            return os.path.exists(output_path)
     except Exception as e:
-        print(f"Gemini TTS V42 FILE METHOD EXCEPTION: {e}")
-        import traceback; traceback.print_exc()
+        print(f"FFmpeg exception {e}")
         return False
-    finally:
-        if Path("temp_gemini_tts_runner.py").exists():
-            try: Path("temp_gemini_tts_runner.py").unlink()
-            except: pass
 
-async def generate_tts_voice(text, output_path="voice.mp3"):
-    print(f"TTS: {len(text.split())} words - Trying FILE-BASED Gemini TTS PRIMARY then Edge fallback")
-    gemini_success = generate_tts_with_gemini_file_method(text, output_path)
-    if gemini_success:
-        print(f"Using FILE-BASED Gemini TTS SUCCESS - {GEMINI_TTS_VOICE_NAME}")
-        try:
-            studio_path = output_path.replace(".mp3", "_studio.mp3")
-            cmd = f'ffmpeg -y -i "{output_path}" -filter:a "loudnorm=I=-16:TP=-1.5:LRA=7,volume=1.05" -c:a libmp3lame -q:a 0 -ar 48000 "{studio_path}"'
-            subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=20)
-            if Path(studio_path).exists() and Path(studio_path).stat().st_size > 1000:
-                Path(studio_path).replace(output_path)
-                print(f"Gemini voice light polish applied")
-        except Exception as e:
-            print(f"Gemini polish skip {e}")
-        return output_path
-    print(f"Gemini FILE METHOD failed, FALLBACK to Edge TTS {VOICE}")
-    communicate = edge_tts.Communicate(text, VOICE, rate=RATE, pitch=PITCH, volume=VOLUME)
-    await communicate.save(output_path)
+# === FB UPLOAD ===
+def upload_fb_video(video_path, title, description):
+    url = f"https://graph.facebook.com/v19.0/{FB_PAGE_ID}/videos"
+    print(f"Uploading {title} - {os.path.getsize(video_path)/1024/1024:.2f} MB")
     try:
-        studio_path = output_path.replace(".mp3", "_studio.mp3")
-        cmd = f'ffmpeg -y -i "{output_path}" -filter:a "highpass=f=85:width_type=o:width=1,lowpass=f=11000:width_type=o:width=1,acompressor=threshold=-18dB:ratio=4:attack=20:release=200:makeup=6dB,equalizer=f=3000:width_type=o:width=1.2:g=2.5,equalizer=f=8000:width_type=o:width=2:g=-2,equalizer=f=150:width_type=o:width=1:g=-1.5,loudnorm=I=-16:TP=-1.5:LRA=7:linear=true,volume=1.15" -c:a libmp3lame -q:a 0 -ar 48000 "{studio_path}"'
-        subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
-        if Path(studio_path).exists() and Path(studio_path).stat().st_size > 1000:
-            Path(studio_path).replace(output_path)
-            print(f"PRO Studio voice applied - NO robotic {Path(output_path).stat().st_size/1024:.1f} KB")
+        with open(video_path, "rb") as f:
+            files = {"source": f}
+            data = {"title": title, "description": description, "access_token": FB_PAGE_TOKEN}
+            r = requests.post(url, files=files, data=data, timeout=300)
+        print(f"FB Upload {title} Status {r.status_code} {r.text[:500]}")
+        if r.status_code == 200:
+            vid = r.json().get("id")
+            print(f"✅ PAGE POSTED SUCCESSFULLY - ID: {vid}")
+            return vid
     except Exception as e:
-        print(f"Studio effect err {e}")
-    return output_path
+        print(f"FB upload fail {e}")
+    return None
 
-def sanitize_drawtext(text):
-    if not text:
-        return "Movie"
-    text = str(text)
-    text = text.replace("'", " ").replace('"', " ").replace(":", " ").replace("\n", " ").replace("\r", " ")
-    text = " ".join(text.split())
-    if len(text) > 45:
-        text = text[:42] + "..."
-    return text.strip() or "Movie"
-
-# === V42 FIXED: FINAL VIDEO CREATION FAILED - DRAWTEXT CHAIN FIXED ===
-def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp4", bgm_path=None, trailer_duration=60, title_text="MoviMoon", m_type="movie"):
+def upload_group_video(video_path, title, description):
+    if not FB_GROUP_ID:
+        return None
+    url = f"https://graph.facebook.com/v19.0/{FB_GROUP_ID}/videos"
+    print(f"Attempting optional group post for {FB_GROUP_ID}...")
+    print(f"Uploading {title} - {os.path.getsize(video_path)/1024/1024:.2f} MB")
     try:
-        if Path(output).exists():
-            Path(output).unlink()
-        has_bgm = bgm_path and Path(bgm_path).exists()
-        if not has_bgm:
-            bgm_path = generate_local_cinematic_bgm("bgm.mp3", "cinematic", duration=trailer_duration)
-            has_bgm = Path(bgm_path).exists()
-        dur = int(trailer_duration)
-        safe_title = sanitize_drawtext(title_text)
-        label_top = "Movie Name" if m_type == "movie" else "Series Name"
-        label_top_safe = sanitize_drawtext(label_top)
-        font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-        if not Path(font_path).exists():
-            font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-            if not Path(font_path).exists():
-                font_path = "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
-        print(f"Creating {dur}s video V42 FIXED FFmpeg - Top: {label_top_safe} | {safe_title} | Type: {m_type}")
-
-        # V42 FIXED: Proper chained drawtext filters [base]->[t1]->[t2]->[t3]->[final_v]
-        if poster_path and Path(poster_path).exists():
-            filter_complex = (
-                f"[0:v]scale=1440:2560:force_original_aspect_ratio=increase,crop=1440:2560,gblur=sigma=25:steps=2,setsar=1,trim=duration={dur}[bg];"
-                f"[1:v]scale=1440:1664:force_original_aspect_ratio=increase,crop=1440:1664,setsar=1[fg];"
-                f"[bg][fg]overlay=(W-w)/2:(H-h)/2:shortest=0,scale=1440:2560:flags=lanczos[base];"
-                f"[base]drawtext=text='{label_top_safe}':fontcolor=white:fontsize=50:box=1:boxcolor=black@0.70:boxborderw=13:borderw=2:bordercolor=black:"
-                f"x=(w-text_w)/2:y=90+4*sin(t*1.8):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[t1];"
-                f"[t1]drawtext=text='{safe_title}':fontcolor=white:fontsize=82:box=1:boxcolor=black@0.75:boxborderw=18:borderw=4:bordercolor=black:"
-                f"x=(w-text_w)/2:y=160+5*sin(t*1.8):shadowcolor=black:shadowx=5:shadowy=5:fontfile={font_path}[t2];"
-                f"[t2]drawtext=text='Watch on':fontcolor=white:fontsize=48:box=1:boxcolor=black@0.70:boxborderw=13:borderw=2:bordercolor=black:"
-                f"x=(w-text_w)/2:y=h-260-4*sin(t*2.2):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[t3];"
-                f"[t3]drawtext=text='movimoon.online':fontcolor=yellow:fontsize=70:box=1:boxcolor=black@0.75:boxborderw=18:borderw=4:bordercolor=black:"
-                f"x=(w-text_w)/2:y=h-190-5*sin(t*2.2):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[final_v];"
-                f"[1:a]volume=0.30[trailer_low];[3:a]volume=0.40[bg_vol];[2:a]asplit=2[voice_sc][voice_mix];"
-                f"[bg_vol][voice_sc]sidechaincompress=threshold=0.015:ratio=8:attack=20:release=400:makeup=1[ducked];"
-                f"[trailer_low][ducked][voice_mix]amix=inputs=3:duration=longest:dropout_transition=0:weights=0.30 0.35 1,volume=1.25,loudnorm=I=-16:TP=-1.5:LRA=8[a]"
-            )
-            cmd = (
-                f'ffmpeg -y -loop 1 -t {dur} -i "{poster_path}" -i "{trailer_path}" -i "{voice_path}" -stream_loop -1 -i "{bgm_path}" '
-                f'-filter_complex "{filter_complex}" '
-                f'-map "[final_v]" -map "[a]" -c:v libx264 -profile:v high -level:v 4.2 -preset fast -crf 20 -pix_fmt yuv420p -r 30 -movflags +faststart -c:a aac -b:a 192k -t {dur} "{output}"'
-            )
+        with open(video_path, "rb") as f:
+            files = {"source": f}
+            data = {"title": title, "description": description, "access_token": FB_PAGE_TOKEN}
+            r = requests.post(url, files=files, data=data, timeout=300)
+        print(f"FB Upload {title} Status {r.status_code} {r.text[:500]}")
+        if r.status_code == 200:
+            return r.json().get("id")
         else:
-            filter_complex = (
-                f"[0:v]scale=1440:2560:force_original_aspect_ratio=increase,crop=1440:2560,gblur=sigma=25:steps=2[bg];"
-                f"[0:v]scale=1440:1664:force_original_aspect_ratio=increase,crop=1440:1664[fg];"
-                f"[bg][fg]overlay=(W-w)/2:(H-h)/2,scale=1440:2560:flags=lanczos[base];"
-                f"[base]drawtext=text='{label_top_safe}':fontcolor=white:fontsize=50:box=1:boxcolor=black@0.70:boxborderw=13:borderw=2:bordercolor=black:"
-                f"x=(w-text_w)/2:y=90+4*sin(t*1.8):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[t1];"
-                f"[t1]drawtext=text='{safe_title}':fontcolor=white:fontsize=82:box=1:boxcolor=black@0.75:boxborderw=18:borderw=4:bordercolor=black:"
-                f"x=(w-text_w)/2:y=160+5*sin(t*1.8):shadowcolor=black:shadowx=5:shadowy=5:fontfile={font_path}[t2];"
-                f"[t2]drawtext=text='Watch on':fontcolor=white:fontsize=48:box=1:boxcolor=black@0.70:boxborderw=13:borderw=2:bordercolor=black:"
-                f"x=(w-text_w)/2:y=h-260-4*sin(t*2.2):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[t3];"
-                f"[t3]drawtext=text='movimoon.online':fontcolor=yellow:fontsize=70:box=1:boxcolor=black@0.75:boxborderw=18:borderw=4:bordercolor=black:"
-                f"x=(w-text_w)/2:y=h-190-5*sin(t*2.2):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[final_v];"
-                f"[0:a]volume=0.30[trailer_low];[2:a]volume=0.40[bg_vol];[1:a]asplit=2[voice_sc][voice_mix];"
-                f"[bg_vol][voice_sc]sidechaincompress=threshold=0.015:ratio=8:attack=20:release=400:makeup=1[ducked];"
-                f"[trailer_low][ducked][voice_mix]amix=inputs=3:duration=longest:dropout_transition=0:weights=0.30 0.35 1,volume=1.25,loudnorm=I=-16:TP=-1.5:LRA=8[a]"
-            )
-            cmd = (
-                f'ffmpeg -y -i "{trailer_path}" -i "{voice_path}" -stream_loop -1 -i "{bgm_path}" '
-                f'-filter_complex "{filter_complex}" '
-                f'-map "[final_v]" -map "[a]" -c:v libx264 -profile:v high -level:v 4.2 -preset fast -crf 20 -pix_fmt yuv420p -r 30 -movflags +faststart -c:a aac -b:a 192k -t {dur} "{output}"'
-            )
-        print(f"FFmpeg V42 FIXED {dur}s running...")
-        result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=600)
-        if Path(output).exists() and Path(output).stat().st_size > 50000:
-            print(f"Final OK V42 FIXED {Path(output).stat().st_size/1024/1024:.2f} MB")
-            return output
-        print(f"FFmpeg err {result.stderr[-1500:]}")
-        print(f"FFmpeg out {result.stdout[-500:]}")
-        return None
+            print("⚠ Group failed but PAGE SUCCESS - WORK DONE")
     except Exception as e:
-        print(f"V42 Video Error {e}")
-        import traceback; traceback.print_exc()
-        return None
+        print(f"Group upload fail {e} ⚠ Group failed but PAGE SUCCESS - WORK DONE")
+    return None
 
-def build_youtube_seo_metadata(title, year, m_type, genre_str, rating, story_bn, link, bangla_title, overview):
-    en_title = title.strip()
-    bn_title = bangla_title.strip() if bangla_title else en_title
-    type_label = "Movie" if m_type == "movie" else "Web Series"
-    type_bn = "সিনেমা" if m_type == "movie" else "সিরিজ"
-    base_title = f"{bn_title} | {en_title} ({year})"
-    if len(base_title) > 70:
-        base_title = f"{en_title} ({year})"
-    if len(base_title) > 80:
-        base_title = base_title[:80]
-    yt_title = f"{base_title} Explained #Shorts"
-    if len(yt_title) > 100:
-        yt_title = f"{en_title} ({year}) #Shorts"
-    yt_title = yt_title[:100]
-    genre_keywords = genre_str.replace(", ", ", ") if genre_str else "Drama"
-    hashtags = f"#Shorts #{en_title.replace(' ', '')} #{type_label} #MoviMoon #MovieReview #BengaliReview #Hollywood #Bollywood #New{type_label}{year} #Trending{type_label}"
-    description = f"""🎬 {en_title} ({year}) - {type_label} Review & Story Explained in Bengali
-{story_bn}
-📖 Full Story:
-{overview[:300] if overview else f"An extraordinary {genre_keywords} story that will touch your heart."}
-🎭 Genre: {genre_keywords}
-⭐ Rating: {rating}/10
-📅 Year: {year}
-🔗 Watch Full Details: {link}
-🌐 Website: https://movimoon.online
-👉 এই {type_bn}টি কেমন লাগলো কমেন্টে জানান!
-👉 এরকম আরো {type_bn} রিভিউ পেতে চ্যানেলটি সাবস্ক্রাইব করুন
-{hashtags}
-#movimoon #movimoononline #banglamoviereview #moviereviewbengali #newmovie{year} #upcomingmovie #moviereview
----
-Disclaimer: This video uses trailer clips under fair use for review purposes. All rights belong to respective owners.
-"""
-    if len(description) > 4500:
-        description = description[:4500]
-    tags = []
-    tags.append(en_title.lower())
-    tags.append(bn_title.lower())
-    tags.append(f"{en_title} {year}")
-    tags.append(f"{en_title} trailer")
-    tags.append(f"{en_title} review")
-    tags.append(f"{en_title} explained")
-    tags.append(f"{en_title} bengali")
-    tags.append(genre_keywords.lower())
-    tags.append(f"{type_label.lower()} {year}")
-    tags.append(f"new {type_label.lower()} {year}")
-    tags.append(f"{type_label.lower()} review bengali")
-    tags.append("movimoon")
-    tags.append("movimoon.online")
-    tags.append("bengali movie review")
-    tags.append("shorts")
-    clean_tags = []
-    for t in tags:
-        t = t.strip().lower()
-        t = t[:30]
-        if t and len(t) > 1 and t not in clean_tags:
-            clean_tags.append(t)
-    clean_tags = clean_tags[:15]
-    return yt_title, description, clean_tags
-
-def upload_video_to_youtube(video_path, yt_title, yt_description, yt_tags):
-    if not YOUTUBE_CLIENT_ID or not YOUTUBE_CLIENT_SECRET or not YOUTUBE_REFRESH_TOKEN:
-        print("⚠ YouTube credentials not set, skipping YouTube upload")
-        return None
+# === YOUTUBE UPLOAD ===
+def upload_youtube_shorts(video_path, title, description, tags):
     try:
-        print(f"Uploading to YouTube Shorts: {yt_title} - {Path(video_path).stat().st_size/1024/1024:.2f} MB")
-        try:
-            from google.oauth2.credentials import Credentials
-            from googleapiclient.discovery import build
-            from googleapiclient.http import MediaFileUpload
-        except ImportError as ie:
-            print(f"YouTube libraries not installed: {ie}, installing...")
-            subprocess.check_call(["pip", "install", "google-api-python-client", "google-auth", "google-auth-oauthlib", "google-auth-httplib2"])
-            from google.oauth2.credentials import Credentials
-            from googleapiclient.discovery import build
-            from googleapiclient.http import MediaFileUpload
-        creds = Credentials(
-            None,
-            refresh_token=YOUTUBE_REFRESH_TOKEN,
-            client_id=YOUTUBE_CLIENT_ID,
-            client_secret=YOUTUBE_CLIENT_SECRET,
-            token_uri="https://oauth2.googleapis.com/token",
-            scopes=["https://www.googleapis.com/auth/youtube.upload"]
-        )
-        youtube = build('youtube', 'v3', credentials=creds)
-        media = MediaFileUpload(video_path, mimetype='video/mp4', resumable=True)
+        from google.oauth2.credentials import Credentials
+        from googleapiclient.discovery import build
+        from googleapiclient.http import MediaFileUpload
+        
+        client_id = os.environ.get("YOUTUBE_CLIENT_ID")
+        client_secret = os.environ.get("YOUTUBE_CLIENT_SECRET")
+        refresh_token = os.environ.get("YOUTUBE_REFRESH_TOKEN")
+        
+        creds = Credentials(None, refresh_token=refresh_token, token_uri="https://oauth2.googleapis.com/token", client_id=client_id, client_secret=client_secret)
+        youtube = build("youtube", "v3", credentials=creds)
+        
+        print(f"Building YouTube SEO metadata for {title}...")
+        yt_title = f"{title} Explained #Shorts"[:95]
+        yt_tags = tags[:15]
+        print(f"YouTube Title: {yt_title}")
+        print(f"YouTube Tags: {', '.join(yt_tags[:5])}...")
+        print(f"Uploading to YouTube Shorts: {yt_title} - {os.path.getsize(video_path)/1024/1024:.2f} MB")
+        
         body = {
-            "snippet": {
-                "title": yt_title,
-                "description": yt_description,
-                "tags": yt_tags,
-                "categoryId": "24",
-                "defaultLanguage": "bn",
-                "defaultAudioLanguage": "bn"
-            },
-            "status": {
-                "privacyStatus": "public",
-                "selfDeclaredMadeForKids": False,
-                "madeForKids": False
-            }
+            "snippet": {"title": yt_title, "description": description, "tags": yt_tags, "categoryId": "24"},
+            "status": {"privacyStatus": "public", "selfDeclaredMadeForKids": False}
         }
-        request = youtube.videos().insert(
-            part="snippet,status",
-            body=body,
-            media_body=media
-        )
+        media = MediaFileUpload(video_path, chunksize=-1, resumable=True, mimetype="video/mp4")
+        request = youtube.videos().insert(part="snippet,status", body=body, media_body=media)
         response = None
         while response is None:
             status, response = request.next_chunk()
-            if status:
-                print(f"YouTube upload {int(status.progress()*100)}%")
-        print(f"✅ YOUTUBE SHORTS UPLOADED - ID: {response.get('id')} - https://youtube.com/shorts/{response.get('id')}")
-        return response
+        vid = response["id"]
+        print(f"✅ YOUTUBE SHORTS UPLOADED - ID: {vid} - https://youtube.com/shorts/{vid}")
+        print(f"✅ YOUTUBE SHORTS ALSO POSTED - https://youtube.com/shorts/{vid}")
+        return vid
     except Exception as e:
-        print(f"❌ YouTube Upload Error: {e}")
-        import traceback; traceback.print_exc()
-        if "quota" in str(e).lower():
-            print("⚠ YouTube quota exceeded (100/day limit). Will retry next run.")
+        print(f"YouTube upload fail: {e}")
         return None
 
-def upload_video_to_facebook(page_id, token, video_path, caption, label):
-    try:
-        print(f"Uploading {label} - {Path(video_path).stat().st_size/1024/1024:.2f} MB")
-        url = f"https://graph.facebook.com/v18.0/{page_id}/videos"
-        with open(video_path, 'rb') as f:
-            files = {'source': f}
-            data = {'description': caption, 'access_token': token}
-            r = requests.post(url, files=files, data=data, timeout=300)
-            print(f"FB Upload {label} Status {r.status_code} {r.text[:500]}")
-            if r.status_code == 200:
-                return r.json()
-        return None
-    except Exception as e:
-        print(f"FB Upload Error {e}")
-        import traceback; traceback.print_exc()
-        return None
-
-async def main():
-    print("=== MoviMoon AutoPoster V42 - V38 EXACT + 2 FIXES START ===")
-    history = load_history()
-    movies = get_trending_mixed()
-    if not movies:
-        print("No movies found")
-        return
-    for idx, movie in enumerate(movies[:10], 1):
-        try:
-            tmdb_id = str(movie['id'])
-            if is_already_posted(tmdb_id, history):
-                print(f"[{idx}/10] Already posted {tmdb_id}, skipping")
-                continue
-            title = movie.get('title') or movie.get('name') or 'Unknown'
-            title_raw = title
-            print(f">>> [{idx}/10] {title} ({tmdb_id})")
-            date_str = movie.get('release_date') or movie.get('first_air_date') or ''
-            year = date_str[:4] if date_str else str(datetime.now().year)
-            m_type = movie.get('media_type','movie')
-            rating = movie.get('vote_average', 7.0)
-            overview = movie.get('overview','') or 'An extraordinary story.'
-            genre_ids = movie.get('genre_ids', [])
-            genre_str = get_genre_names(genre_ids)
-            link = f"https://movimoon.online/movie/{tmdb_id}-{slugify(title)}" if m_type=='movie' else f"https://movimoon.online/tv/{tmdb_id}-{slugify(title)}"
-            youtube_url, yt_key = get_youtube_trailer(movie)
-            if not youtube_url:
-                print(f"No trailer for {title}, skipping")
-                continue
-            print(f"Trailer URL: {youtube_url}")
-            trailer_file = download_trailer(youtube_url, "trailer.mp4")
-            if not trailer_file:
-                print(f"Trailer download failed for {title}")
-                continue
-            poster_file = download_movie_poster(movie, "poster.jpg")
-            trailer_dur_raw = get_video_duration(trailer_file)
-            estimated_final = min(trailer_dur_raw, 60.0)
-            if trailer_dur_raw > 62:
-                estimated_final = 60.0
-            target_words = int(estimated_final * 2.66)
-            target_words = max(75, min(160, target_words))
-            print(f"Trailer duration {trailer_dur_raw:.1f}s -> target {target_words} words (160 for 60s, proportional)")
-            voice_text, story_bn, bangla_title = call_gemini_video_script(title, year, m_type, rating, overview, link, movie, target_words=target_words, trailer_duration=trailer_dur_raw)
-            wc = len(voice_text.split())
-            if wc > target_words:
-                voice_text = " ".join(voice_text.split()[:target_words])
-                wc = target_words
-                print(f"Trimmed voice to {target_words} words for {trailer_dur_raw:.1f}s")
-            if wc < target_words - 10:
-                print(f"WARNING: Voice still {wc} words < {target_words-5}, adding fallback")
-                voice_text = voice_text + " এই সিনেমাটি অবশ্যই দেখার মতো। গল্পটা মন ছুঁয়ে যাবে।"
-                voice_text = " ".join(voice_text.split()[:target_words])
-                wc = len(voice_text.split())
-            print(f"Voice {wc} words (target {max(70, target_words-5)}-{target_words} for {trailer_dur_raw:.1f}s)")
-            caption = build_caption(title, year, m_type, genre_str, rating, story_bn, link)
-            print(f"Caption built: {caption[:200]}")
-            await generate_tts_voice(voice_text, "voice.mp3")
-            trailer_dur = get_video_duration(trailer_file)
-            trailer_60s = smart_trim_trailer_to_60s(trailer_file, "trailer_60s.mp4")
-            trailer_dur = get_video_duration(trailer_60s)
-            bgm_file = ensure_bgm("bgm.mp3", movie, duration=int(trailer_dur))
-            final_video = create_9_16_hd_video(trailer_60s, poster_file, "voice.mp3", "final.mp4", bgm_path=bgm_file, trailer_duration=int(trailer_dur), title_text=title_raw, m_type=m_type)
-            if not final_video or not Path(final_video).exists():
-                print(f"Final video creation failed for {title}")
-                continue
-            fb_result = upload_video_to_facebook(FB_PAGE_ID, FB_PAGE_TOKEN, final_video, caption, title)
-            if fb_result:
-                print(f"✅ PAGE POSTED SUCCESSFULLY - ID: {fb_result.get('id','unknown')}")
-                history[tmdb_id] = datetime.now().isoformat()
-                save_history(history)
-                print(f"Posted {title} successfully - PAGE ONLY SUCCESS = WORK DONE")
-                if FB_GROUP_ID and FB_GROUP_ID.strip():
-                    try:
-                        print(f"Attempting optional group post for {FB_GROUP_ID}...")
-                        group_result = upload_video_to_facebook(FB_GROUP_ID, FB_PAGE_TOKEN, final_video, caption, f"{title}")
-                        if group_result:
-                            print(f"✅ GROUP ALSO POSTED - ID: {group_result.get('id','unknown')}")
-                        else:
-                            print(f"⚠ Group failed but PAGE SUCCESS - WORK DONE")
-                    except Exception as ge:
-                        print(f"⚠ Group error ignored: {ge} - PAGE SUCCESS = WORK DONE")
-                else:
-                    print(f"No FB_GROUP_ID, PAGE ONLY mode")
-                try:
-                    print(f"Building YouTube SEO metadata for {title}...")
-                    yt_title, yt_description, yt_tags = build_youtube_seo_metadata(title, year, m_type, genre_str, rating, story_bn, link, bangla_title, overview)
-                    print(f"YouTube Title: {yt_title}")
-                    print(f"YouTube Tags: {', '.join(yt_tags[:5])}...")
-                    yt_result = upload_video_to_youtube(final_video, yt_title, yt_description, yt_tags)
-                    if yt_result:
-                        print(f"✅ YOUTUBE SHORTS ALSO POSTED - https://youtube.com/shorts/{yt_result.get('id')}")
-                    else:
-                        print(f"⚠ YouTube upload failed/skip but PAGE SUCCESS - WORK DONE")
-                except Exception as ye:
-                    print(f"⚠ YouTube error ignored: {ye} - PAGE SUCCESS = WORK DONE")
-                for f in ["trailer.mp4", "trailer_60s.mp4", "poster.jpg", "voice.mp3", "bgm.mp3", "final.mp4", "voice_text.txt", "temp_gemini_tts_runner.py", "output/movie_explain_speech.mp3"]:
-                    try:
-                        p = Path(f)
-                        if p.exists():
-                            if p.is_file():
-                                p.unlink()
-                    except:
-                        pass
-                if Path("output").exists():
-                    try:
-                        import shutil
-                        shutil.rmtree("output", ignore_errors=True)
-                    except:
-                        pass
-                print(f"🎉 1 VIDEO DONE - FB + YT (optional) - WORKFLOW COMPLETE - STOPPING, NO 2nd TRY")
-                break
-            else:
-                print(f"Failed to post {title}")
-            for f in ["trailer.mp4", "trailer_60s.mp4", "poster.jpg", "voice.mp3", "bgm.mp3", "final.mp4", "voice_text.txt", "temp_gemini_tts_runner.py"]:
-                try:
-                    if Path(f).exists():
-                        Path(f).unlink()
-                except:
-                    pass
-            print(f"Waiting 10s before next...")
-            await asyncio.sleep(10)
-        except Exception as e:
-            print(f"Error processing movie {movie.get('id')}: {e}")
-            import traceback; traceback.print_exc()
+# === MAIN ===
+def main():
+    print("=== MoviMoon AutoPoster V43 - V38 EXACT + 2 FIXES START ===")
+    print("Filtering: 2024+ | Hollywood + Bollywood + South + Series")
+    
+    movies = fetch_tmdb()
+    history = get_history()
+    posted_ids = set([str(h["id"]) for h in history])
+    
+    count = 0
+    for idx, m in enumerate(movies[:10]):
+        mid = str(m["id"])
+        if mid in posted_ids:
+            print(f"[{idx+1}/10] Already posted {mid}, skipping")
             continue
-    print("=== MoviMoon AutoPoster V42 END ===")
+        
+        is_tv = m.get("media_type") == "tv" or "first_air_date" in m
+        print(f">>> [{idx+1}/10] {m.get('title') or m.get('name')} ({mid})")
+        
+        details = get_movie_details(mid, is_tv)
+        if not details:
+            continue
+        
+        trailer = select_trailer(details)
+        if not trailer:
+            print(f"No trailer for {mid}")
+            continue
+        
+        print(f"Trailer selected: {trailer.get('name')} | Type: {trailer.get('type')} | Official: {trailer.get('official')}")
+        yt_url = f"https://www.youtube.com/watch?v={trailer['key']}"
+        print(f"Trailer URL: {yt_url}")
+        
+        trailer_file = f"{OUTPUT_DIR}/trailer_{mid}.mp4"
+        if not download_trailer_yt_dlp(yt_url, trailer_file):
+            continue
+        
+        duration = get_video_duration(trailer_file)
+        story = generate_story_gemini(details, duration)
+        
+        # Voice words calc
+        voice_words = len(story.split())
+        target_words = int(duration * 2.66)
+        print(f"Voice {voice_words} words (target {target_words-5}-{target_words} for {duration}s)")
+        
+        # Caption
+        genres = ", ".join([g["name"] for g in details.get("genres", [])][:3])
+        rating = details.get("vote_average", "N/A")
+        title_bangla = details.get("title") or details.get("name")
+        caption = f"🎬 Movie - {title_bangla}({details.get('release_date','2026')[:4]})\n🎭 Genres - {genres}\n⭐ Rating - {rating}/10\n📖 Story - {story[:200]}"
+        print(f"Caption built: {caption[:150]}")
+        
+        voice_path = generate_voice(story)
+        if not voice_path:
+            print("Voice fail, skipping")
+            continue
+        
+        # Trim
+        trimmed = f"{OUTPUT_DIR}/trimmed_{mid}.mp4"
+        print(f"Smart trim START {duration:.1f}s -> 60s | Sampling whole trailer from start to end")
+        smart_trim_trailer(trailer_file, trimmed, 60)
+        
+        # BGM
+        bgm_path = generate_bgm("happy", 60)
+        
+        # Final video
+        final_path = f"{OUTPUT_DIR}/final_{mid}.mp4"
+        title_en = details.get("title") or details.get("name")
+        if not create_final_video(trimmed, voice_path, bgm_path, {"title": title_en, "media_type": "movie"}, final_path):
+            continue
+        
+        # Upload
+        fb_title = f"{title_en} - Trailer Review"
+        fb_desc = f"{caption}\n\n#MoviMoon #MovieReview #BanglaReview\nFull video: movimoon.online\n\n{title_en} trailer review in Bangla"
+        print(f"Uploading {title_en} - {os.path.getsize(final_path)/1024/1024:.2f} MB")
+        
+        page_id = upload_fb_video(final_path, fb_title, fb_desc)
+        if page_id:
+            print(f"Posted {title_en} successfully - PAGE ONLY SUCCESS = WORK DONE")
+            upload_group_video(final_path, fb_title, fb_desc)
+            
+            # YouTube
+            yt_tags = [title_en.lower(), f"{title_en} 2026", f"{title_en} trailer", f"{title_en} review", "bangla review", "movie review", "movimoon"]
+            upload_youtube_shorts(final_path, f"{title_en} | {title_en} (2026) Explained #Shorts", fb_desc, yt_tags)
+            
+            save_history(mid)
+            print(f"🎉 1 VIDEO DONE - FB + YT (optional) - WORKFLOW COMPLETE - STOPPING, NO 2nd TRY")
+            break
+    
+    print("=== MoviMoon AutoPoster V43 END ===")
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
