@@ -2,7 +2,7 @@ import os, requests, random, re, time, asyncio, json, subprocess, pathlib
 from datetime import datetime, timedelta
 from pathlib import Path
 
-print("=== MoviMoon Bot - V47 FINAL | V46 BASELINE LOCKED + YT TAG FIX + ALL MODELS LOCKED ===")
+print("=== MoviMoon Bot - V48 FINAL | V46 BASELINE LOCKED + YT TAG FIX v2 + INVALID_SCOPE FIX ===")
 
 try:
     import edge_tts
@@ -1038,15 +1038,17 @@ def upload_video_to_youtube(video_path, yt_title, yt_description, yt_tags):
             from google.oauth2.credentials import Credentials
             from googleapiclient.discovery import build
             from googleapiclient.http import MediaFileUpload
-        creds = Credentials(
+        # V48 FIX: Use ONLY youtube.upload scope for insert (matches refresh token scope)
+        # This prevents invalid_scope error seen in V47
+        creds_upload = Credentials(
             None,
             refresh_token=YOUTUBE_REFRESH_TOKEN,
             client_id=YOUTUBE_CLIENT_ID,
             client_secret=YOUTUBE_CLIENT_SECRET,
             token_uri="https://oauth2.googleapis.com/token",
-            scopes=["https://www.googleapis.com/auth/youtube.upload", "https://www.googleapis.com/auth/youtube"]
+            scopes=["https://www.googleapis.com/auth/youtube.upload"]
         )
-        youtube = build('youtube', 'v3', credentials=creds)
+        youtube = build('youtube', 'v3', credentials=creds_upload)
         media = MediaFileUpload(video_path, mimetype='video/mp4', resumable=True)
         body = {
             "snippet": {
@@ -1074,12 +1076,21 @@ def upload_video_to_youtube(video_path, yt_title, yt_description, yt_tags):
             if status:
                 print(f"YouTube upload {int(status.progress()*100)}%")
         vid_id = response.get('id')
-        print(f"✅ YOUTUBE SHORTS UPLOADED - ID: {vid_id} - https://youtube.com/shorts/{vid_id}")
-        # === V47 TAG FIX: Second call to ensure tags are set (YT API needs update after insert) ===
+        print(f"✅ YOUTUBE SHORTS UPLOADED - ID: {vid_id} - https://youtube.com/shorts/{vid_id} | Tags sent in insert: {yt_tags}")
+        # === V48 TAG FIX: Try update with broader scope, fallback gracefully if token lacks scope ===
         if yt_tags and vid_id:
             try:
-                print(f"V47 TAG FIX: Updating video {vid_id} with {len(yt_tags)} tags via videos().update...")
-                # Need to get current snippet first to preserve title/desc
+                print(f"V48 TAG FIX: Attempting tag update for {vid_id}...")
+                # Try with full youtube scope for update (requires token with youtube scope)
+                creds_full = Credentials(
+                    None,
+                    refresh_token=YOUTUBE_REFRESH_TOKEN,
+                    client_id=YOUTUBE_CLIENT_ID,
+                    client_secret=YOUTUBE_CLIENT_SECRET,
+                    token_uri="https://oauth2.googleapis.com/token",
+                    scopes=["https://www.googleapis.com/auth/youtube"]
+                )
+                youtube_full = build('youtube', 'v3', credentials=creds_full)
                 update_body = {
                     "id": vid_id,
                     "snippet": {
@@ -1091,13 +1102,20 @@ def upload_video_to_youtube(video_path, yt_title, yt_description, yt_tags):
                         "defaultAudioLanguage": "bn"
                     }
                 }
-                update_response = youtube.videos().update(
+                update_response = youtube_full.videos().update(
                     part="snippet",
                     body=update_body
                 ).execute()
-                print(f"✅ YOUTUBE TAGS UPDATED - {update_response.get('snippet', {}).get('tags', [])}")
+                print(f"✅ YOUTUBE TAGS UPDATED via full scope - {update_response.get('snippet', {}).get('tags', [])}")
             except Exception as tag_err:
-                print(f"⚠ YouTube TAG UPDATE FAILED (but video already uploaded): {tag_err}")
+                err_str = str(tag_err)
+                if "invalid_scope" in err_str:
+                    print(f"⚠ TAG UPDATE skipped: Your YOUTUBE_REFRESH_TOKEN only has 'youtube.upload' scope, not 'youtube' scope.")
+                    print(f"   → Tags were already sent in insert request, so they SHOULD appear in Studio.")
+                    print(f"   → To enable separate tag update, regenerate token with BOTH scopes: youtube + youtube.upload")
+                    print(f"   → But current upload SUCCESS with tags: {yt_tags}")
+                else:
+                    print(f"⚠ YouTube TAG UPDATE FAILED (but video already uploaded with tags in insert): {tag_err}")
                 import traceback; traceback.print_exc()
         return response
     except Exception as e:
