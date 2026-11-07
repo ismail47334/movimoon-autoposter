@@ -1,4 +1,4 @@
-name: MoviMoon V40 - FIXED - Residential Proxy + Gemini TTS
+name: MoviMoon V42 - FIXED - V38 EXACT + Gemini TTS File Method
 
 on:
   schedule:
@@ -18,26 +18,29 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install FFmpeg + Node + yt-dlp + POT - V38 FIXED
+      - name: Install FFmpeg + Node + yt-dlp + POT - V42 FIXED
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y ffmpeg fonts-noto-core
+          sudo apt-get install -y ffmpeg fonts-noto-core fonts-dejavu
           curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
           sudo apt-get install -y nodejs
           node --version
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt --upgrade
           python -m pip install -U yt-dlp[default] --upgrade
-          python -m pip install -U google-genai --upgrade
+          python -m pip install -U google-genai pydantic --upgrade
           python -m yt_dlp --version
+          python -c "import google.genai; print('google-genai OK')"
 
-      - name: Clean old cookies - V38 NO FAKE COOKIE
+      - name: Clean old cookies - V42 NO FAKE COOKIE
         run: |
           rm -f cookies.txt youtube_oauth_token.json
-          echo "V38 FIXED: No fake cookies.txt - truly NO COOKIE mode"
+          rm -rf output
+          rm -f voice_text.txt temp_gemini_tts_runner.py
+          echo "V42 FIXED: No fake cookies.txt - truly NO COOKIE mode"
           ls -lh
 
-      - name: Run MoviMoon V38 FIXED
+      - name: Run MoviMoon V42 FIXED - V38 EXACT
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
           FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
@@ -60,5 +63,5 @@ jobs:
           git config --global user.name 'MoviMoon Bot'
           git config --global user.email 'bot@movimoon.online'
           git add posted_history.json || true
-          git diff --staged --quiet || git commit -m "Update history V38 FIXED [skip ci]" || true
+          git diff --staged --quiet || git commit -m "Update history V42 FIXED [skip ci]" || true
           git push || true
