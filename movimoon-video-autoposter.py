@@ -569,7 +569,7 @@ Output JSON only: {{"voiceover":"...","bangla_title":"...","caption":"...","word
         import traceback; traceback.print_exc()
         return None, None, None
 
-def call_gemini_video_script(title, year, m_type, rating, overview, link, movie=None, target_words=160, trailer_duration=60):
+def call_gemini_video_script(title, year, m_type, rating, overview, link, movie=None, target_words=155, trailer_duration=60):
     genre_str = get_genre_names(movie.get("genre_ids", []) if movie else [], english=True)
     genre_str_bn = get_genre_names(movie.get("genre_ids", []) if movie else [], english=False)
     title_raw = title
@@ -604,7 +604,7 @@ def call_gemini_video_script(title, year, m_type, rating, overview, link, movie=
 Title: {title} Year: {year} Type: {m_type} Genre: {genre_str} Rating: {rating}/10 Synopsis: {overview} Link: {link} Target: {trailer_duration:.0f}s Words: {target_min}-{target_max}
 Genre Direction: {genre_direction}
 ROLE: Chief Bengali Movie Reviewer for MoviMoon. Create DISTINCTIVE Bengali voiceover that hooks in 2-3 seconds, explains central premise and conflict, creates curiosity without spoilers, ends with CTA.
-CRITICAL: EXACTLY {target_min}-{target_max} words MAX {target_max}. MUST include at end: "পুরো সিনেমাটি দেখতে ভিজিট করুন মুভিমুন ডট অনলাইন।"
+CRITICAL: EXACTLY {target_min}-{target_max} words MAX {target_max}. MUST include at end: "পুরো সিনেমাটির লিঙ্ক পেতে ডেস্ক্রিপশন দেখুন অথবা ভিজিট করুন মুভিমুন ডট অনলাইন।"
 OUTPUT JSON ONLY: {{"voiceover": "{target_min}-{target_max} words...", "bangla_title": "title", "caption": "summary", "word_count": {target_min}}}
 Return JSON only.
 """
@@ -616,7 +616,7 @@ Return JSON only.
         "gemini-4-argon",
         "gemini-3.1-pro-preview"
     ]
-    def smart_expand_to_limit(current_voice, current_wc, target_min=165, target_max=170):
+    def smart_expand_to_limit(current_voice, current_wc, target_min=150, target_max=155):
         expansions = [
             f"এই {genre_str_bn or 'গল্প'}তে প্রতিটি দৃশ্য গল্পের সাথে জড়িত।",
             "পরিচালকের গল্প বলার ধরন দর্শককে ধরে রাখবে।",
@@ -737,7 +737,7 @@ OUTPUT ONLY JSON: {{"voiceover": "{target_min}-{target_max} words...", "bangla_t
     story_bn = "এক অসাধারণ রহস্যময় গল্পের জগত!"
     base = f"বন্ধুরা আজকে কথা বলবো {year} সালের অসাধারণ {genre_str} সিনেমা {title_raw} নিয়ে। {overview[:200]} "
     middle = "এই সিনেমার প্রতিটি দৃশ্য অসাধারণভাবে সাজানো হয়েছে। পরিচালকের মুন্সিয়ানা মুগ্ধ করবে। অভিনেতাদের দুর্দান্ত অভিনয়, সিনেমাটোগ্রাফি এবং আবহ সঙ্গীত প্রাণবন্ত। প্রতিটি মুহূর্তে টানটান উত্তেজনা রয়েছে। গল্পটা মন ছুঁয়ে যাবে। শেষের টুইস্টটা একেবারে অপ্রত্যাশিত। "
-    end = "এই সিনেমাটি অবশ্যই দেখার মতো। পুরো সিনেমাটি দেখতে ভিজিট করুন মুভিমুন ডট অনলাইন।"
+    end = "এই সিনেমাটি অবশ্যই দেখার মতো। পুরো সিনেমাটির লিঙ্ক পেতে ডেস্ক্রিপশন দেখুন অথবা ভিজিট করুন মুভিমুন ডট অনলাইন।"
     full = base + middle*2 + end
     words = full.split()
     if len(words) > target_max:
