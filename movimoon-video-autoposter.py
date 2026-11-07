@@ -2,7 +2,7 @@ import os, requests, random, re, time, asyncio, json, subprocess, pathlib
 from datetime import datetime, timedelta
 from pathlib import Path
 
-print("=== MoviMoon Bot - V46 FINAL | V38 EXACT + History Fix + REST Fenrir TTS + FFMPEG CHAIN FIX ===")
+print("=== MoviMoon Bot - V47 FINAL | V46 BASELINE LOCKED + YT TAG FIX + ALL MODELS LOCKED ===")
 
 try:
     import edge_tts
@@ -938,6 +938,19 @@ def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp
         import traceback; traceback.print_exc()
         return None
 
+def clean_yt_tag(t):
+    # YouTube tags: only allow a-z0-9 and space, max 30 chars, no special chars
+    # Bengali tags cause silent reject, so convert to english only for tags
+    import re
+    t = t.strip().lower()
+    t = re.sub(r'[^a-z0-9 ]+', ' ', t)  # keep only english alphanumeric
+    t = re.sub(r'\s+', ' ', t).strip()
+    if len(t) < 2 or len(t) > 30:
+        return None
+    if t in ['the', 'and', 'movie', 'film']:
+        return None
+    return t
+
 def build_youtube_seo_metadata(title, year, m_type, genre_str, rating, story_bn, link, bangla_title, overview):
     en_title = title.strip()
     bn_title = bangla_title.strip() if bangla_title else en_title
@@ -972,37 +985,49 @@ Disclaimer: This video uses trailer clips under fair use for review purposes. Al
 """
     if len(description) > 4500:
         description = description[:4500]
-    tags = []
-    tags.append(en_title.lower())
-    tags.append(bn_title.lower())
-    tags.append(f"{en_title} {year}")
-    tags.append(f"{en_title} trailer")
-    tags.append(f"{en_title} review")
-    tags.append(f"{en_title} explained")
-    tags.append(f"{en_title} bengali")
-    tags.append(genre_keywords.lower())
-    tags.append(f"{type_label.lower()} {year}")
-    tags.append(f"new {type_label.lower()} {year}")
-    tags.append(f"{type_label.lower()} review bengali")
-    tags.append("movimoon")
-    tags.append("movimoon.online")
-    tags.append("bengali movie review")
-    tags.append("shorts")
+    # === V47 TAG FIX: ENGLISH ONLY, CLEANED, YT-COMPLIANT ===
+    raw_tags = []
+    raw_tags.append(en_title.lower())
+    raw_tags.append(f"{en_title} {year}")
+    raw_tags.append(f"{en_title} trailer")
+    raw_tags.append(f"{en_title} review")
+    raw_tags.append(f"{en_title} explained")
+    raw_tags.append(f"{en_title} movie")
+    raw_tags.append(genre_keywords.lower())
+    raw_tags.append(f"{type_label.lower()} {year}")
+    raw_tags.append(f"new {type_label.lower()} {year}")
+    raw_tags.append(f"{type_label.lower()} review")
+    raw_tags.append("movimoon")
+    raw_tags.append("bengali movie review")
+    raw_tags.append("shorts")
+    raw_tags.append(f"{year} {type_label.lower()}")
+    raw_tags.append(f"hollywood {type_label.lower()}")
+    raw_tags.append("movie explained bengali")
     clean_tags = []
-    for t in tags:
-        t = t.strip().lower()
-        t = t[:30]
-        if t and len(t) > 1 and t not in clean_tags:
-            clean_tags.append(t)
-    clean_tags = clean_tags[:15]
-    return yt_title, description, clean_tags
+    for t in raw_tags:
+        ct = clean_yt_tag(t)
+        if ct and ct not in clean_tags:
+            clean_tags.append(ct)
+    # Enforce YouTube 500 char total limit
+    total_len = 0
+    final_tags = []
+    for t in clean_tags:
+        if total_len + len(t) + 1 > 450:
+            break
+        final_tags.append(t)
+        total_len += len(t) + 1
+    final_tags = final_tags[:15]
+    if len(final_tags) < 5:
+        final_tags = ["movimoon", "movie review", "bengali review", "new movie", "shorts"]
+    print(f"V47 Tags cleaned: {final_tags} total chars {sum(len(x) for x in final_tags)}")
+    return yt_title, description, final_tags
 
 def upload_video_to_youtube(video_path, yt_title, yt_description, yt_tags):
     if not YOUTUBE_CLIENT_ID or not YOUTUBE_CLIENT_SECRET or not YOUTUBE_REFRESH_TOKEN:
         print("⚠ YouTube credentials not set, skipping YouTube upload")
         return None
     try:
-        print(f"Uploading to YouTube Shorts: {yt_title} - {Path(video_path).stat().st_size/1024/1024:.2f} MB")
+        print(f"Uploading to YouTube Shorts: {yt_title} - {Path(video_path).stat().st_size/1024/1024:.2f} MB | Tags: {yt_tags}")
         try:
             from google.oauth2.credentials import Credentials
             from googleapiclient.discovery import build
@@ -1019,7 +1044,7 @@ def upload_video_to_youtube(video_path, yt_title, yt_description, yt_tags):
             client_id=YOUTUBE_CLIENT_ID,
             client_secret=YOUTUBE_CLIENT_SECRET,
             token_uri="https://oauth2.googleapis.com/token",
-            scopes=["https://www.googleapis.com/auth/youtube.upload"]
+            scopes=["https://www.googleapis.com/auth/youtube.upload", "https://www.googleapis.com/auth/youtube"]
         )
         youtube = build('youtube', 'v3', credentials=creds)
         media = MediaFileUpload(video_path, mimetype='video/mp4', resumable=True)
@@ -1048,7 +1073,32 @@ def upload_video_to_youtube(video_path, yt_title, yt_description, yt_tags):
             status, response = request.next_chunk()
             if status:
                 print(f"YouTube upload {int(status.progress()*100)}%")
-        print(f"✅ YOUTUBE SHORTS UPLOADED - ID: {response.get('id')} - https://youtube.com/shorts/{response.get('id')}")
+        vid_id = response.get('id')
+        print(f"✅ YOUTUBE SHORTS UPLOADED - ID: {vid_id} - https://youtube.com/shorts/{vid_id}")
+        # === V47 TAG FIX: Second call to ensure tags are set (YT API needs update after insert) ===
+        if yt_tags and vid_id:
+            try:
+                print(f"V47 TAG FIX: Updating video {vid_id} with {len(yt_tags)} tags via videos().update...")
+                # Need to get current snippet first to preserve title/desc
+                update_body = {
+                    "id": vid_id,
+                    "snippet": {
+                        "title": yt_title,
+                        "description": yt_description,
+                        "tags": yt_tags,
+                        "categoryId": "24",
+                        "defaultLanguage": "bn",
+                        "defaultAudioLanguage": "bn"
+                    }
+                }
+                update_response = youtube.videos().update(
+                    part="snippet",
+                    body=update_body
+                ).execute()
+                print(f"✅ YOUTUBE TAGS UPDATED - {update_response.get('snippet', {}).get('tags', [])}")
+            except Exception as tag_err:
+                print(f"⚠ YouTube TAG UPDATE FAILED (but video already uploaded): {tag_err}")
+                import traceback; traceback.print_exc()
         return response
     except Exception as e:
         print(f"❌ YouTube Upload Error: {e}")
