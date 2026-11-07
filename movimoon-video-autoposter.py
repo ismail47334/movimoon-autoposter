@@ -2,7 +2,7 @@ import os, requests, random, re, time, asyncio, json, subprocess, pathlib
 from datetime import datetime, timedelta
 from pathlib import Path
 
-print("=== MoviMoon Bot - V37 LATEST FIXED Nov 4 2026 Researched | gemini-3.8-flash + tv_downgraded + POT | BASE FOR FUTURE ===")
+print("=== MoviMoon Bot - V38 FIXED | gemini-3.8-flash-tts + RESIDENTIAL PROXY + NO-FAKE-COOKIE ===")
 
 try:
     import edge_tts
@@ -25,7 +25,6 @@ FB_PAGE_TOKEN = os.getenv("FB_PAGE_TOKEN")
 FB_GROUP_ID = os.getenv("FB_GROUP_ID")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-# YouTube Shorts - V29 NEW
 YOUTUBE_CLIENT_ID = os.getenv("YOUTUBE_CLIENT_ID")
 YOUTUBE_CLIENT_SECRET = os.getenv("YOUTUBE_CLIENT_SECRET")
 YOUTUBE_REFRESH_TOKEN = os.getenv("YOUTUBE_REFRESH_TOKEN")
@@ -169,37 +168,74 @@ def get_video_duration(video_path):
     except:
         return 0
 
+# === V38 FIXED RESIDENTIAL PROXY PARSER ===
+def parse_proxy_line(line):
+    line = line.strip()
+    if not line or line.startswith("#"):
+        return None
+    # Format: IP:PORT:USER:PASS -> http://USER:PASS@IP:PORT
+    # Or: IP:PORT
+    # Or: http://USER:PASS@IP:PORT (already)
+    if line.startswith("http://") or line.startswith("https://"):
+        return line
+    parts = line.split(":")
+    if len(parts) == 4:  # IP:PORT:USER:PASS
+        ip, port, user, pwd = parts
+        return f"http://{user}:{pwd}@{ip}:{port}"
+    elif len(parts) == 2: # IP:PORT
+        return f"http://{line}"
+    return None
+
+def get_residential_proxies():
+    """V38: Read YOUTUBE_PROXY_LIST and YOUTUBE_PROXY secrets"""
+    proxies = []
+    proxy_list_raw = os.getenv("YOUTUBE_PROXY_LIST", "")
+    single_proxy = os.getenv("YOUTUBE_PROXY", "")
+    
+    if proxy_list_raw:
+        lines = proxy_list_raw.strip().splitlines()
+        for line in lines:
+            p = parse_proxy_line(line)
+            if p and p not in proxies:
+                proxies.append(p)
+        print(f"Residential: Found {len(proxies)} proxies from YOUTUBE_PROXY_LIST")
+    
+    if single_proxy:
+        sp = parse_proxy_line(single_proxy)
+        if sp and sp not in proxies:
+            proxies.insert(0, sp)
+            print(f"Residential: Added single YOUTUBE_PROXY")
+    
+    return proxies
+
 def get_free_proxies():
-    """Method 2: Fetch free proxies - GitHub Azure IP bypass - Nov 2026 Researched"""
     proxies = []
     try:
         url = "https://api.proxyscrape.com/v2/?request=getproxies&protocol=http&timeout=10000&country=all&ssl=all&anonymity=all"
         r = requests.get(url, timeout=15)
         if r.status_code == 200:
             lines = r.text.strip().splitlines()
-            for line in lines[:3]:
+            for line in lines[:5]:
                 line = line.strip()
                 if ":" in line and len(line) > 6:
                     proxies.append(f"http://{line}")
-        print(f"Method2: Fetched {len(proxies)} free proxies")
+        print(f"Method3: Fetched {len(proxies)} free proxies")
     except Exception as e:
-        print(f"Method2 proxy fetch fail: {e}")
-    env_proxy = os.getenv("YOUTUBE_PROXY") or os.getenv("HTTP_PROXY")
-    if env_proxy and env_proxy not in proxies:
-        proxies.insert(0, env_proxy)
+        print(f"Method3 proxy fetch fail: {e}")
     return proxies[:3]
 
 def download_via_ytdlp_fixed(youtube_url, output="trailer.mp4"):
-    """
-    V37 LATEST FIXED Nov 4 2026 - RESEARCHED TODAY - BASE VERSION
-    March 2026 guide: tv_downgraded, android_vr, web_embedded, mweb = Full DASH no token needed
-    PO Token via bgutil-ytdlp-pot-provider plugin
-    """
-    print(f"=== YT-DLP V37 LATEST FIXED Nov 4 2026 {youtube_url} ===")
+    print(f"=== YT-DLP V38 FIXED {youtube_url} ===")
     Path(output).unlink(missing_ok=True)
+    
+    # V38 FIX: Delete fake cookies.txt (<200 bytes)
     if Path("cookies.txt").exists():
-        Path("cookies.txt").unlink(missing_ok=True)
-    Path("cookies.txt").write_text("# V37 LATEST FIXED NO COOKIE - tv_downgraded + android_vr + web_embedded + mweb")
+        size = Path("cookies.txt").stat().st_size
+        if size < 200:
+            print(f"Deleting fake cookies.txt {size} bytes - NO COOKIE MODE")
+            Path("cookies.txt").unlink(missing_ok=True)
+        else:
+            print(f"Keeping real cookies.txt {size} bytes")
 
     method1_strategies = [
         {"name": "M1-tv_downgraded+android_vr+web_embedded BEST 2026", "args": '--js-runtimes node --remote-components ejs:github --extractor-args "youtube:player_client=tv_downgraded,android_vr,web_embedded,mweb" -f "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best" --merge-output-format mp4'},
@@ -210,7 +246,7 @@ def download_via_ytdlp_fixed(youtube_url, output="trailer.mp4"):
         {"name": "M1-android_vr", "args": '--extractor-args "youtube:player_client=android_vr" -f "best[height<=1080]/best" --merge-output-format mp4'},
     ]
 
-    print(">>> METHOD 1: Client Downgrading + PO Token (NO COOKIE)")
+    print(">>> METHOD 1: NO COOKIE, NO PROXY")
     for idx, strat in enumerate(method1_strategies, 1):
         cmd = f'yt-dlp {strat["args"]} -o "{output}" "{youtube_url}" --no-playlist --no-warnings --retries 3 --fragment-retries 3 2>&1'
         print(f"  [M1-{idx}] {strat['name']}...")
@@ -227,28 +263,56 @@ def download_via_ytdlp_fixed(youtube_url, output="trailer.mp4"):
             print(f"  ERROR M1 {e}")
             continue
 
-    print(">>> METHOD 1 FAILED - Trying METHOD 2: Proxy")
-    proxies = get_free_proxies()
-    if proxies:
-        for p_idx, proxy in enumerate(proxies, 1):
+    print(">>> METHOD 2: RESIDENTIAL PROXY (YOUTUBE_PROXY_LIST secret)")
+    residential_proxies = get_residential_proxies()
+    if residential_proxies:
+        for p_idx, proxy in enumerate(residential_proxies[:10], 1): # Try max 10 residential
             safe_proxy = proxy.replace('"', '')
-            print(f"  [M2-Proxy {p_idx}] {safe_proxy[:30]}...")
-            for strat in method1_strategies[:2]:
-                cmd = f'yt-dlp --proxy "{safe_proxy}" {strat["args"]} -o "{output}" "{youtube_url}" --no-playlist --no-warnings --retries 2 2>&1'
+            # Mask password in log
+            log_proxy = safe_proxy
+            if "@" in log_proxy:
                 try:
-                    result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=180)
+                    log_proxy = log_proxy.split("@")[-1]
+                except:
+                    log_proxy = log_proxy[:20] + "..."
+            print(f"  [M2-Residential {p_idx}/{len(residential_proxies)}] {log_proxy}...")
+            for strat in method1_strategies[:2]: # Only top 2 strategies for speed
+                cmd = f'yt-dlp --proxy "{safe_proxy}" {strat["args"]} -o "{output}" "{youtube_url}" --no-playlist --no-warnings --retries 2 --socket-timeout 30 2>&1'
+                try:
+                    result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=120)
                     if Path(output).exists() and Path(output).stat().st_size > 50000:
                         size_mb = Path(output).stat().st_size/1024/1024
-                        print(f"    SUCCESS M2 Proxy {p_idx} + {strat['name']} - {size_mb:.2f} MB")
+                        print(f"    SUCCESS M2 Residential {p_idx} + {strat['name']} - {size_mb:.2f} MB")
                         return output
                     Path(output).unlink(missing_ok=True)
                 except Exception as e:
                     print(f"    ERROR M2 {e}")
                     continue
     else:
-        print("  M2 No proxies")
+        print("  M2 No residential proxies found in secrets, skipping to METHOD 3")
 
-    print(">>> ALL 2 METHODS FAILED - Final fallback")
+    print(">>> METHOD 3: FREE PROXY FALLBACK")
+    free_proxies = get_free_proxies()
+    if free_proxies:
+        for p_idx, proxy in enumerate(free_proxies, 1):
+            safe_proxy = proxy.replace('"', '')
+            print(f"  [M3-Free {p_idx}] {safe_proxy[:30]}...")
+            for strat in method1_strategies[:2]:
+                cmd = f'yt-dlp --proxy "{safe_proxy}" {strat["args"]} -o "{output}" "{youtube_url}" --no-playlist --no-warnings --retries 2 --socket-timeout 20 2>&1'
+                try:
+                    result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=90)
+                    if Path(output).exists() and Path(output).stat().st_size > 50000:
+                        size_mb = Path(output).stat().st_size/1024/1024
+                        print(f"    SUCCESS M3 Free {p_idx} + {strat['name']} - {size_mb:.2f} MB")
+                        return output
+                    Path(output).unlink(missing_ok=True)
+                except Exception as e:
+                    print(f"    ERROR M3 {e}")
+                    continue
+    else:
+        print("  M3 No free proxies")
+
+    print(">>> ALL 3 METHODS FAILED - Final fallback no proxy")
     try:
         cmd = f'yt-dlp --js-runtimes node --remote-components ejs:github -f "best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings --retries 1 2>&1'
         subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=120)
@@ -263,7 +327,6 @@ def download_trailer(youtube_url, output="trailer.mp4"):
     return download_via_ytdlp_fixed(youtube_url, output)
 
 def download_movie_poster(movie, output="poster.jpg"):
-
     try:
         poster_path = movie.get("poster_path")
         if not poster_path:
@@ -278,8 +341,6 @@ def download_movie_poster(movie, output="poster.jpg"):
     except Exception as e:
         print(f"Poster err {e}")
     return None
-
-
 
 def get_genre_names(genre_ids, english=False):
     genre_map_en = {
@@ -352,11 +413,8 @@ def smart_trim_trailer_to_60s(input_path, output_path="trailer_60s.mp4"):
         if dur <= 62:
             print(f"No trim needed {dur:.1f}s <=62s - full trailer")
             return input_path
-        
         print(f"Smart trim START {dur:.1f}s -> 60s | Sampling whole trailer from start to end")
         Path(output_path).unlink(missing_ok=True)
-        
-        # Cleanup old seg files
         for p in Path(".").glob("seg_*.mp4"):
             try:
                 p.unlink()
@@ -364,8 +422,6 @@ def smart_trim_trailer_to_60s(input_path, output_path="trailer_60s.mp4"):
                 pass
         if Path("concat_v37.txt").exists():
             Path("concat_v37.txt").unlink()
-        
-        # Determine cuts - covers start to end
         target = 60.0
         if dur <= 75:
             num_cuts = 6
@@ -382,12 +438,10 @@ def smart_trim_trailer_to_60s(input_path, output_path="trailer_60s.mp4"):
         else:
             num_cuts = 12
             cut_dur = 5.0
-        
         if num_cuts > 1:
             interval = (dur - cut_dur) / (num_cuts - 1)
         else:
             interval = 0
-        
         cuts = []
         for i in range(num_cuts):
             start = i * interval
@@ -399,17 +453,13 @@ def smart_trim_trailer_to_60s(input_path, output_path="trailer_60s.mp4"):
                 start = max(2.0, start)
                 end = start + cut_dur
             cuts.append((round(start, 2), round(end, 2)))
-        
         print(f"Trim plan: {num_cuts} cuts x {cut_dur}s every {interval:.1f}s = {target}s total")
         for idx, (s, e) in enumerate(cuts):
             print(f"  Cut {idx+1}: {s:.1f}s - {e:.1f}s")
-        
-        # V37 FIXED: Use segment files + concat demuxer (100% working, avoids filter_complex Invalid argument)
         seg_files = []
         success_count = 0
         for i, (s, e) in enumerate(cuts):
             seg_path = f"seg_{i}.mp4"
-            # Use -ss accurate seek + re-encode for clean cut
             cmd_seg = f'ffmpeg -y -ss {s} -to {e} -i "{input_path}" -c:v libx264 -preset veryfast -crf 23 -c:a aac -r 30 "{seg_path}"'
             result = subprocess.run(cmd_seg, shell=True, capture_output=True, text=True, timeout=90)
             if Path(seg_path).exists() and Path(seg_path).stat().st_size > 10000:
@@ -417,17 +467,12 @@ def smart_trim_trailer_to_60s(input_path, output_path="trailer_60s.mp4"):
                 success_count += 1
             else:
                 print(f"Seg {i} failed: {result.stderr[-200:]}")
-        
         if success_count >= 3:
-            # Write concat list
             with open("concat_v37.txt", "w", encoding='utf-8') as f:
                 for sf in seg_files:
                     f.write(f"file '{sf}'"+"\n")
-            
             cmd_concat = f'ffmpeg -y -f concat -safe 0 -i concat_v37.txt -c:v libx264 -preset veryfast -crf 23 -c:a aac "{output_path}"'
             result_concat = subprocess.run(cmd_concat, shell=True, capture_output=True, text=True, timeout=120)
-            
-            # Cleanup seg files
             for sf in seg_files:
                 if Path(sf).exists():
                     try:
@@ -439,29 +484,22 @@ def smart_trim_trailer_to_60s(input_path, output_path="trailer_60s.mp4"):
                     Path("concat_v37.txt").unlink()
                 except:
                     pass
-            
             if Path(output_path).exists() and Path(output_path).stat().st_size > 50000:
                 final_dur = get_video_duration(output_path)
-                print(f"Smart trim DONE {final_dur:.1f}s from {dur:.1f}s with {success_count} cuts across whole trailer - V37 FIXED")
+                print(f"Smart trim DONE {final_dur:.1f}s from {dur:.1f}s with {success_count} cuts across whole trailer - V38 FIXED")
                 return output_path
             else:
                 print(f"Concat failed: {result_concat.stderr[-300:]}")
-        
         print(f"Segment method had only {success_count} success, trying fallback middle 60s")
-        # Fallback: simple middle 60s starting at 2s
         cmd2 = f'ffmpeg -y -ss 2 -i "{input_path}" -t 60 -c:v libx264 -preset veryfast -crf 23 -c:a aac "{output_path}"'
         subprocess.run(cmd2, shell=True, capture_output=True, text=True, timeout=90)
         if Path(output_path).exists():
             return output_path
         return input_path
-        
     except Exception as e:
-        print(f"Smart trim V37 FIXED err {e}")
+        print(f"Smart trim V38 FIXED err {e}")
         import traceback; traceback.print_exc()
         return input_path
-
-
-
 
 def call_groq_fallback(movie_title, year, m_type, rating, overview, link, genre_str, target_words=160, trailer_duration=60):
     if not GROQ_API_KEY or not GROQ_AVAILABLE:
@@ -479,7 +517,6 @@ Structure: Hook + Story + Acting + CTA.
 Total {target_min}-{target_words} words. Pure Bengali.
 Say "movimoon dot online" at end.
 Output JSON only: {{"voiceover":"...","bangla_title":"...","caption":"...","word_count":...}}"""
-        # V32 NEW GROQ MODELS - 2026 updated list, old llama3-70b decommissioned
         groq_models = [
             "openai/gpt-oss-20b",
             "openai/gpt-oss-120b",
@@ -526,10 +563,7 @@ Output JSON only: {{"voiceover":"...","bangla_title":"...","caption":"...","word
         import traceback; traceback.print_exc()
         return None, None, None
 
-
-
 def call_gemini_video_script(title, year, m_type, rating, overview, link, movie=None, target_words=160, trailer_duration=60):
-    # V39 MASTER PROMPT HYBRID - Genre-aware + Fact-grounded + Your word count enforcement
     genre_str = get_genre_names(movie.get("genre_ids", []) if movie else [], english=True)
     genre_str_bn = get_genre_names(movie.get("genre_ids", []) if movie else [], english=False)
     title_raw = title
@@ -548,129 +582,32 @@ def call_gemini_video_script(title, year, m_type, rating, overview, link, movie=
     target_min = max(70, target_words - 5)
     target_max = target_words
 
-    # Determine genre style for prompt
     genre_lower = genre_str.lower()
     genre_direction = ""
     if any(x in genre_lower for x in ["action", "thriller"]):
-        genre_direction = "ACTION/THRILLER: Emphasize danger, stakes, escalating conflict, tactical decisions, physical intensity. Build tension."
+        genre_direction = "ACTION/THRILLER: Emphasize danger, stakes, escalating conflict"
     elif any(x in genre_lower for x in ["mystery", "crime", "suspense"]):
-        genre_direction = "MYSTERY/CRIME: Build curiosity around clues, secrets, suspicious relationships, investigation. Never reveal final culprit."
+        genre_direction = "MYSTERY/CRIME: Build curiosity around clues"
     elif "horror" in genre_lower:
-        genre_direction = "HORROR: Emphasize dread, isolation, disturbing mystery, psychological tension, fear of unknown. Do not invent supernatural events."
+        genre_direction = "HORROR: Emphasize dread, isolation, disturbing mystery"
     elif any(x in genre_lower for x in ["sci-fi", "science", "fantasy"]):
-        genre_direction = "SCI-FI/FANTASY: Explain central concept, unusual world, technology, supernatural rules in accessible Bengali. Avoid confusing exposition."
+        genre_direction = "SCI-FI/FANTASY: Explain central concept"
     elif any(x in genre_lower for x in ["romance", "drama"]):
-        genre_direction = "ROMANCE/DRAMA: Focus on relationships, difficult choices, emotional conflict, chemistry, sacrifice, human stakes."
+        genre_direction = "ROMANCE/DRAMA: Focus on relationships"
     elif "comedy" in genre_lower:
-        genre_direction = "COMEDY: Lively delivery, amusing premise, character misunderstandings, timing. Avoid forced jokes."
-    elif any(x in genre_lower for x in ["history", "war"]):
-        genre_direction = "HISTORICAL/WAR: Explain historical setting, conflict, human stakes. Distinguish fact from fiction."
-    elif any(x in genre_lower for x in ["animation", "family"]):
-        genre_direction = "ANIMATION/FAMILY: Highlight imaginative world, expressive characters, emotional themes, adventure."
-    elif any(x in genre_lower for x in ["psychological", "mind"]):
-        genre_direction = "PSYCHOLOGICAL: Emphasize perception, identity, uncertainty, conflicting motives, thought-provoking questions."
+        genre_direction = "COMEDY: Lively delivery"
     else:
-        genre_direction = "GENERAL: Focus on central premise, conflict, what makes this title distinctive, emotional or suspenseful core."
+        genre_direction = "GENERAL: Focus on central premise"
 
-    # V39 MASTER PROMPT - Hybrid
-    prompt = f"""# MOVIMOON CINEMATIC REVIEW MASTER PROMPT - V39 HYBRID
-
-## ROLE & IDENTITY
-You are the Chief Cinematic Storyteller, Professional Bengali Movie Reviewer, Trailer Narration Director for MoviMoon. Think like an experienced film critic who understands storytelling, character motivations, direction, cinematography, suspense, emotional payoff, and audience psychology. Your narration must sound like a real professional Bangladeshi cinema presenter - not AI summarizing.
-
-## INPUT DATA
-Title: {title}
-Year: {year}
-Type: {m_type}
-Genre: {genre_str} / {genre_str_bn}
-Rating: {rating}/10
-Synopsis: {overview}
-Link: {link}
-Target Duration: {trailer_duration:.0f} seconds
-Target Words: {target_min}-{target_max} words EXACT - MAX {target_max}
-
-## PRIMARY OBJECTIVE
-Create a DISTINCTIVE, fact-grounded Bengali voiceover that hooks in 2-3 seconds, explains central premise and conflict, discusses relevant filmmaking aspects when supported, creates curiosity without spoilers, and ends with natural CTA.
-
-## RESEARCH & FACTUAL ACCURACY - CRITICAL
-- Never invent actors, directors, characters, awards, plot twists, scenes, dialogue.
-- Do not confuse similarly named movies, remakes, sequels.
-- If director/actor cannot be verified from given data, OMIT rather than guess.
-- Use rating only when relevant, do not create unsupported quality judgment.
-- If information limited, produce premise-focused narration, not generic praise.
-
-## GENRE-AWARE DIRECTION FOR THIS TITLE
-{genre_direction}
-
-Choose storytelling style based on this genre. For hybrid genres, combine relevant styles. Every script must feel SPECIFICALLY written for THIS movie - not generic.
-
-## PROFESSIONAL FILM-CRITIC APPROACH
-Avoid empty phrases like "অভিনয় অসাধারণ", "প্রতিটি দৃশ্য দুর্দান্ত", "শেষের টুইস্ট অবিশ্বাস্য" unless you give SPECIFIC grounded explanation.
-
-Instead, when supported, discuss:
-- Lead actor's screen presence or demands of role (only if known)
-- Character conflict or chemistry
-- Director's storytelling approach
-- Visual atmosphere, editing, production design
-- Distinctive narrative premise or emotional theme
-
-Prefer specific analysis over generic praise.
-
-## TRAILER SCENE AWARENESS
-You do NOT have actual trailer video. Do not claim to have watched trailer, do not assign narration to invented timestamps or specific shots. Write narration that naturally fits a typical trailer montage and verified story premise. Do not narrate every visible action - explain WHY conflict matters.
-
-## 60-SECOND STRUCTURE (Adapt to {trailer_duration:.0f}s)
-1. OPENING HOOK (0-5s): Provocative question, striking dilemma, unusual premise. Avoid "আজকে আমরা কথা বলব..."
-2. PREMISE & STAKES (5-20s): Protagonist, central situation, what is at risk.
-3. CINEMATIC ANALYSIS (20-42s): Most relevant - character performance OR direction OR atmosphere OR suspense OR world-building - choose only meaningful for THIS title.
-4. CURIOSITY & VERDICT (42-52s): What makes title worth exploring. Measured impression based on evidence, no fabrication.
-5. MOVIMOON CTA (52-60s): Natural transition to: "পুরো সিনেমাটি দেখতে ভিজিট করুন মুভিমুন ডট অনলাইন।"
-
-## VOICEOVER STYLE
-Language: Natural, fluent, contemporary Bengali for Bangladeshi audience. Write for speech, not reading. Short-medium sentences, strong verbs.
-Avoid: Excessive English, jargon, repetitive adjectives, robotic phrasing, artificial suspense, formal literary Bengali.
-Do NOT use headings, numbered sections, stage directions, emojis inside voiceover.
-Keep English movie title when Bengali transliteration sounds unnatural.
-
-## CRITICAL WORD COUNT & CTA RULES - MUST FOLLOW
-- EXACTLY {target_min}-{target_max} words. MAXIMUM {target_max}, never over {target_max}. This is for {trailer_duration:.0f}s video.
-- Count words by whitespace. If over {target_max}, TRIM to {target_max}.
-- MUST include at end: "পুরো সিনেমাটি দেখতে ভিজিট করুন মুভিমুন ডট অনলাইন।"
-- Say "মুভিমুন ডট অনলাইন" NOT "মুভিমুন অনলাইন ডট কম" or "movimoon online".
-- CTA must be inside word budget.
-
-## SPOILER POLICY
-Spoiler-light. Reveal setup, early conflict, motivations, publicly established premise. Do NOT reveal ending, final twist, secret identity, decisive betrayal, major late revelation unless explicitly requested.
-
-## OUTPUT
-Return valid JSON ONLY. No markdown fences, no commentary outside JSON.
-
-Exactly these keys:
-{{
-  "voiceover": "Complete Bengali narration {target_min}-{target_max} words ready for TTS, including CTA at end.",
-  "bangla_title": "Natural Bengali presentation title, keep English official title when useful.",
-  "caption": "Concise Bengali summary of premise and distinctive appeal for social media.",
-  "word_count": {target_min}
-}}
-
-word_count must be actual whitespace count of voiceover.
-
-FINAL CHECK:
-- Every factual claim supported?
-- Opening engaging?
-- Explains what makes THIS title distinctive (not generic)?
-- Genre reflected in storytelling?
-- Avoids generic filler?
-- Spoiler-conscious?
-- CTA included naturally with exact phrase "মুভিমুন ডট অনলাইন"?
-- JSON valid?
-- Voiceover {target_min}-{target_max} words?
-
+    prompt = f"""# MOVIMOON CINEMATIC REVIEW MASTER PROMPT - V38
+Title: {title} Year: {year} Type: {m_type} Genre: {genre_str} Rating: {rating}/10 Synopsis: {overview} Link: {link} Target: {trailer_duration:.0f}s Words: {target_min}-{target_max}
+Genre Direction: {genre_direction}
+ROLE: Chief Bengali Movie Reviewer for MoviMoon. Create DISTINCTIVE Bengali voiceover that hooks in 2-3 seconds, explains central premise and conflict, creates curiosity without spoilers, ends with CTA.
+CRITICAL: EXACTLY {target_min}-{target_max} words MAX {target_max}. MUST include at end: "পুরো সিনেমাটি দেখতে ভিজিট করুন মুভিমুন ডট অনলাইন।"
+OUTPUT JSON ONLY: {{"voiceover": "{target_min}-{target_max} words...", "bangla_title": "title", "caption": "summary", "word_count": {target_min}}}
 Return JSON only.
 """
 
-    # ONLY gemini-3.5-flash-lite as user requested - this one works and returns
-    # V37 LATEST FIXED Nov 4 2026 - RESEARCHED TODAY
     models = [
         "gemini-3.8-flash",
         "gemini-3.5-flash-lite",
@@ -679,19 +616,8 @@ Return JSON only.
         "gemini-4-argon",
         "gemini-3.1-pro-preview"
     ]
-    sdk_client = None
-    try:
-        from google import genai as genai_new
-        if GEMINI_API_KEY:
-            sdk_client = genai_new.Client(api_key=GEMINI_API_KEY)
-            print("google-genai SDK NEW OK")
-    except Exception as e:
-        print(f"SDK not available {e}")
-        sdk_client = None
-
 
     def smart_expand_to_limit(current_voice, current_wc, target_min=165, target_max=170):
-        # V39 - More specific, genre-aware expansions - not generic
         expansions = [
             f"এই {genre_str_bn or 'গল্প'}তে প্রতিটি দৃশ্য গল্পের সাথে জড়িত।",
             "পরিচালকের গল্প বলার ধরন দর্শককে ধরে রাখবে।",
@@ -810,9 +736,7 @@ OUTPUT ONLY JSON: {{"voiceover": "{target_min}-{target_max} words...", "bangla_t
     groq_voice, groq_story, groq_title = call_groq_fallback(title_raw, year, m_type, rating, overview, link, genre_str, target_words, trailer_duration)
     if groq_voice:
         return groq_voice, groq_story, groq_title
-    # Ultimate fallback
     story_bn = "এক অসাধারণ রহস্যময় গল্পের জগত!"
-    # Build guaranteed voice for target
     base = f"বন্ধুরা আজকে কথা বলবো {year} সালের অসাধারণ {genre_str} সিনেমা {title_raw} নিয়ে। {overview[:200]} "
     middle = "এই সিনেমার প্রতিটি দৃশ্য অসাধারণভাবে সাজানো হয়েছে। পরিচালকের মুন্সিয়ানা মুগ্ধ করবে। অভিনেতাদের দুর্দান্ত অভিনয়, সিনেমাটোগ্রাফি এবং আবহ সঙ্গীত প্রাণবন্ত। প্রতিটি মুহূর্তে টানটান উত্তেজনা রয়েছে। গল্পটা মন ছুঁয়ে যাবে। শেষের টুইস্টটা একেবারে অপ্রত্যাশিত। "
     end = "এই সিনেমাটি অবশ্যই দেখার মতো। পুরো সিনেমাটি দেখতে ভিজিট করুন মুভিমুন ডট অনলাইন।"
@@ -821,11 +745,6 @@ OUTPUT ONLY JSON: {{"voiceover": "{target_min}-{target_max} words...", "bangla_t
     if len(words) > target_max:
         full = " ".join(words[:target_max])
     return full, story_bn, title_raw
-
-
-
-
-
 
 def build_caption(title, year, m_type, genre_str, rating, story_bn, link):
     type_label = "Series" if m_type == "tv" else "Movie"
@@ -836,14 +755,12 @@ def build_caption(title, year, m_type, genre_str, rating, story_bn, link):
     caption = f"🎬 {type_label} - {title}({year})\n🎭 Genres - {genre_str}\n⭐ Rating - {rating}/10\n{story_text}\n🔗 ফুল মুভি লিংক: {link}\n👉 পুরো রিভিউ এবং ডাউনলোড পেতে ভিজিট করুন movimoon.online\n#MoviMoon #MovieReview #TrendingNow #MustWatch #BengaliReview #ViralReels\n#S #{title.replace(' ', '').replace('-', '')}"
     return caption
 
-
-# === GEMINI TTS - PRIMARY - Nov 2026 Tested - Fenrir voice + energetic prompt ===
-GEMINI_TTS_VOICE_NAME = "Fenrir"  # Movie recap best: Fenrir/Charon/Orus, Bengali accent: Achernar
-GEMINI_TTS_MODEL = "gemini-3.8-flash-tts"  # Latest free till Dec 31 2026 - tested working
+# === V38 TTS - YOUR REQUESTED MODELS ===
+GEMINI_TTS_MODELS = ["gemini-3.8-flash-tts", "gemini-3.8-flash-lite-tts"]
+GEMINI_TTS_VOICE_NAME = "Fenrir"
 GEMINI_TTS_PROMPT_PREFIX = "[Speak in a highly energetic, thrilling, fast-paced Bangladeshi young male voice, perfect for movie explanation]"
 
 def generate_tts_with_gemini(text, output_path="voice.mp3"):
-    """Gemini TTS PRIMARY - user tested working in other repo"""
     if not GEMINI_API_KEY:
         print("Gemini TTS: No API key")
         return False
@@ -851,46 +768,48 @@ def generate_tts_with_gemini(text, output_path="voice.mp3"):
         from google import genai
         from google.genai import types
         client = genai.Client(api_key=GEMINI_API_KEY)
-        # Auto prepend energetic Bangladeshi voice prompt as requested
         full_text = f"{GEMINI_TTS_PROMPT_PREFIX} {text}".strip()
-        print(f"Gemini TTS: Generating with {GEMINI_TTS_MODEL} voice {GEMINI_TTS_VOICE_NAME} - {len(full_text.split())} words")
-        speech_config = types.SpeechConfig(
-            voice_config=types.VoiceConfig(
-                prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                    voice_name=GEMINI_TTS_VOICE_NAME
+        
+        for tts_model in GEMINI_TTS_MODELS:
+            try:
+                print(f"Gemini TTS: Generating with {tts_model} voice {GEMINI_TTS_VOICE_NAME} - {len(full_text.split())} words")
+                response = client.models.generate_content(
+                    model=tts_model,
+                    contents=full_text,
+                    config=types.GenerateContentConfig(
+                        response_modalities=["AUDIO"],
+                        speech_config=types.SpeechConfig(
+                            voice_config=types.VoiceConfig(
+                                prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                                    voice_name=GEMINI_TTS_VOICE_NAME
+                                )
+                            )
+                        )
+                    )
                 )
-            )
-        )
-        response = client.models.generate_content(
-            model=GEMINI_TTS_MODEL,
-            contents=full_text,
-            config=types.GenerateContentConfig(
-                response_modalities=["AUDIO"],
-                speech_config=speech_config
-            )
-        )
-        audio_data = response.candidates[0].content.parts[0].inline_data.data
-        with open(output_path, "wb") as f:
-            f.write(audio_data)
-        if pathlib.Path(output_path).exists() and pathlib.Path(output_path).stat().st_size > 1000:
-            print(f"Gemini TTS SUCCESS - {pathlib.Path(output_path).stat().st_size/1024:.1f} KB saved to {output_path}")
-            return True
-        else:
-            print("Gemini TTS: File too small or not created")
-            return False
+                audio_data = response.candidates[0].content.parts[0].inline_data.data
+                with open(output_path, "wb") as f:
+                    f.write(audio_data)
+                if pathlib.Path(output_path).exists() and pathlib.Path(output_path).stat().st_size > 1000:
+                    print(f"Gemini TTS SUCCESS - Model {tts_model} - {pathlib.Path(output_path).stat().st_size/1024:.1f} KB saved to {output_path}")
+                    return True
+                else:
+                    print(f"Gemini TTS: {tts_model} File too small")
+                    continue
+            except Exception as e:
+                print(f"Gemini TTS FAILED {tts_model}: {e}")
+                continue
+        return False
     except Exception as e:
-        print(f"Gemini TTS FAILED: {e}")
+        print(f"Gemini TTS ALL FAILED: {e}")
         import traceback; traceback.print_exc()
         return False
 
-
 async def generate_tts_voice(text, output_path="voice.mp3"):
     print(f"TTS: {len(text.split())} words - Trying Gemini TTS PRIMARY then Edge fallback")
-    # PRIMARY: Gemini TTS - highly energetic thrilling Bangladeshi male voice
     gemini_success = generate_tts_with_gemini(text, output_path)
     if gemini_success:
         print(f"Using Gemini TTS voice - {GEMINI_TTS_VOICE_NAME} - SUCCESS")
-        # Still apply studio polish if needed? Gemini already high quality, skip heavy filter, just loudnorm light
         try:
             studio_path = output_path.replace(".mp3", "_studio.mp3")
             cmd = f'ffmpeg -y -i "{output_path}" -filter:a "loudnorm=I=-16:TP=-1.5:LRA=7,volume=1.05" -c:a libmp3lame -q:a 0 -ar 48000 "{studio_path}"'
@@ -926,13 +845,11 @@ def sanitize_drawtext(text):
     if not text:
         return "Movie"
     text = str(text)
-    # Avoid problematic chars
     text = text.replace("'", " ").replace('"', " ").replace(":", " ").replace("\n", " ").replace("\r", " ")
     text = " ".join(text.split())
     if len(text) > 45:
         text = text[:42] + "..."
     return text.strip() or "Movie"
-
 
 def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp4", bgm_path=None, trailer_duration=60, title_text="MoviMoon", m_type="movie"):
     try:
@@ -951,21 +868,21 @@ def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp
             font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
             if not Path(font_path).exists():
                 font_path = "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
-        print(f"Creating {dur}s video FINAL V37 FIXED-TRIM + V39 MASTER PROMPT 1440p SMART-TRIM ZOOM 65% 2K - Top: {label_top_safe} | {safe_title} | Type: {m_type}")
+        print(f"Creating {dur}s video FINAL V38 FIXED-TRIM + V39 MASTER PROMPT 1440p SMART-TRIM ZOOM 65% 2K - Top: {label_top_safe} | {safe_title} | Type: {m_type}")
         if poster_path and Path(poster_path).exists():
             cmd = (
                 f"ffmpeg -y -loop 1 -t {dur} -i \"{poster_path}\" "
                 f"-i \"{trailer_path}\" -i \"{voice_path}\" -stream_loop -1 -i \"{bgm_path}\" "
                 f"-filter_complex \"[0:v]scale=1440:2560:force_original_aspect_ratio=increase,crop=1440:2560,gblur=sigma=25:steps=2,setsar=1,trim=duration={dur}[bg];"
                 f"[1:v]scale=1440:1664:force_original_aspect_ratio=increase,crop=1440:1664,setsar=1[fg];"
-                f"[bg][fg]overlay=(W-w)/2:(H-h)/2:shortest=0,scale=1440:2560:flags=lanczos[base0];"
-                f"[base0]drawtext=text='{label_top_safe}':fontcolor=white:fontsize=50:box=1:boxcolor=black@0.70:boxborderw=13:borderw=2:bordercolor=black:"
-                f"x=(w-text_w)/2:y=90+4*sin(t*1.8):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[base1];"
-                f"[base1]drawtext=text='{safe_title}':fontcolor=white:fontsize=82:box=1:boxcolor=black@0.75:boxborderw=18:borderw=4:bordercolor=black:"
+                f"[bg][fg]overlay=(W-w)/2:(H-h)/2:shortest=0,scale=1440:2560:flags=lanczos;"
+                f"drawtext=text='{label_top_safe}':fontcolor=white:fontsize=50:box=1:boxcolor=black@0.70:boxborderw=13:borderw=2:bordercolor=black:"
+                f"x=(w-text_w)/2:y=90+4*sin(t*1.8):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path};"
+                f"drawtext=text='{safe_title}':fontcolor=white:fontsize=82:box=1:boxcolor=black@0.75:boxborderw=18:borderw=4:bordercolor=black:"
                 f"x=(w-text_w)/2:y=160+5*sin(t*1.8):shadowcolor=black:shadowx=5:shadowy=5:fontfile={font_path}[base_top];"
                 f"[base_top]drawtext=text='Watch on':fontcolor=white:fontsize=48:box=1:boxcolor=black@0.70:boxborderw=13:borderw=2:bordercolor=black:"
-                f"x=(w-text_w)/2:y=h-260-4*sin(t*2.2):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[base2];"
-                f"[base2]drawtext=text='movimoon.online':fontcolor=yellow:fontsize=70:box=1:boxcolor=black@0.75:boxborderw=18:borderw=4:bordercolor=black:"
+                f"x=(w-text_w)/2:y=h-260-4*sin(t*2.2):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path};"
+                f"drawtext=text='movimoon.online':fontcolor=yellow:fontsize=70:box=1:boxcolor=black@0.75:boxborderw=18:borderw=4:bordercolor=black:"
                 f"x=(w-text_w)/2:y=h-190-5*sin(t*2.2):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[final_v];"
                 f"[1:a]volume=0.30[trailer_low];[3:a]volume=0.40[bg_vol];[2:a]asplit=2[voice_sc][voice_mix];"
                 f"[bg_vol][voice_sc]sidechaincompress=threshold=0.015:ratio=8:attack=20:release=400:makeup=1[ducked];"
@@ -977,48 +894,37 @@ def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp
                 f"ffmpeg -y -i \"{trailer_path}\" -i \"{voice_path}\" -stream_loop -1 -i \"{bgm_path}\" "
                 f"-filter_complex \"[0:v]scale=1440:2560:force_original_aspect_ratio=increase,crop=1440:2560,gblur=sigma=25:steps=2[bg];"
                 f"[0:v]scale=1440:1664:force_original_aspect_ratio=increase,crop=1440:1664[fg];"
-                f"[bg][fg]overlay=(W-w)/2:(H-h)/2,scale=1440:2560:flags=lanczos[base0];"
-                f"[base0]drawtext=text='{label_top_safe}':fontcolor=white:fontsize=50:box=1:boxcolor=black@0.70:boxborderw=13:borderw=2:bordercolor=black:"
-                f"x=(w-text_w)/2:y=90+4*sin(t*1.8):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[base1];"
-                f"[base1]drawtext=text='{safe_title}':fontcolor=white:fontsize=82:box=1:boxcolor=black@0.75:boxborderw=18:borderw=4:bordercolor=black:"
+                f"[bg][fg]overlay=(W-w)/2:(H-h)/2,scale=1440:2560:flags=lanczos;"
+                f"drawtext=text='{label_top_safe}':fontcolor=white:fontsize=50:box=1:boxcolor=black@0.70:boxborderw=13:borderw=2:bordercolor=black:"
+                f"x=(w-text_w)/2:y=90+4*sin(t*1.8):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path};"
+                f"drawtext=text='{safe_title}':fontcolor=white:fontsize=82:box=1:boxcolor=black@0.75:boxborderw=18:borderw=4:bordercolor=black:"
                 f"x=(w-text_w)/2:y=160+5*sin(t*1.8):shadowcolor=black:shadowx=5:shadowy=5:fontfile={font_path}[base_top];"
                 f"[base_top]drawtext=text='Watch on':fontcolor=white:fontsize=48:box=1:boxcolor=black@0.70:boxborderw=13:borderw=2:bordercolor=black:"
-                f"x=(w-text_w)/2:y=h-260-4*sin(t*2.2):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[base2];"
-                f"[base2]drawtext=text='movimoon.online':fontcolor=yellow:fontsize=70:box=1:boxcolor=black@0.75:boxborderw=18:borderw=4:bordercolor=black:"
+                f"x=(w-text_w)/2:y=h-260-4*sin(t*2.2):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path};"
+                f"drawtext=text='movimoon.online':fontcolor=yellow:fontsize=70:box=1:boxcolor=black@0.75:boxborderw=18:borderw=4:bordercolor=black:"
                 f"x=(w-text_w)/2:y=h-190-5*sin(t*2.2):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[final_v];"
                 f"[0:a]volume=0.30[trailer_low];[2:a]volume=0.40[bg_vol];[1:a]asplit=2[voice_sc][voice_mix];"
                 f"[bg_vol][voice_sc]sidechaincompress=threshold=0.015:ratio=8:attack=20:release=400:makeup=1[ducked];"
                 f"[trailer_low][ducked][voice_mix]amix=inputs=3:duration=longest:dropout_transition=0:weights=0.30 0.35 1,volume=1.25,loudnorm=I=-16:TP=-1.5:LRA=8[a]\" "
                 f"-map \"[final_v]\" -map \"[a]\" -c:v libx264 -profile:v high -level:v 4.2 -preset fast -crf 20 -pix_fmt yuv420p -r 30 -movflags +faststart -c:a aac -b:a 192k -t {dur} \"{output}\""
             )
-        print(f"FFmpeg FINAL V37 FIXED-TRIM + V39 MASTER PROMPT 1440p SMART-TRIM {dur}s...")
+        print(f"FFmpeg FINAL V38 {dur}s...")
         result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=600)
         if Path(output).exists() and Path(output).stat().st_size > 50000:
-            print(f"Final OK V37 SMART-TRIM 1440p {Path(output).stat().st_size/1024/1024:.2f} MB - ZOOM 65% + 2-LINE TITLE + DYNAMIC WORDS")
+            print(f"Final OK V38 SMART-TRIM 1440p {Path(output).stat().st_size/1024/1024:.2f} MB")
             return output
         print(f"FFmpeg err {result.stderr[-1500:]}")
         return None
     except Exception as e:
-        print(f"V37 Error {e}")
+        print(f"V38 Error {e}")
         import traceback; traceback.print_exc()
         return None
 
-
-
-
 def build_youtube_seo_metadata(title, year, m_type, genre_str, rating, story_bn, link, bangla_title, overview):
-    """Build SEO-friendly YouTube Shorts title, description, tags"""
-    # Clean title for SEO
     en_title = title.strip()
     bn_title = bangla_title.strip() if bangla_title else en_title
-    
-    # Type label
     type_label = "Movie" if m_type == "movie" else "Web Series"
     type_bn = "সিনেমা" if m_type == "movie" else "সিরিজ"
-    
-    # SEO Title: 100 chars max, include keywords
-    # Format: Bengali Title | English Title (Year) Explained #Shorts
-    # Fallback if too long
     base_title = f"{bn_title} | {en_title} ({year})"
     if len(base_title) > 70:
         base_title = f"{en_title} ({year})"
@@ -1028,40 +934,26 @@ def build_youtube_seo_metadata(title, year, m_type, genre_str, rating, story_bn,
     if len(yt_title) > 100:
         yt_title = f"{en_title} ({year}) #Shorts"
     yt_title = yt_title[:100]
-    
-    # SEO Description - 5000 chars max, keyword rich
     genre_keywords = genre_str.replace(", ", ", ") if genre_str else "Drama"
     hashtags = f"#Shorts #{en_title.replace(' ', '')} #{type_label} #MoviMoon #MovieReview #BengaliReview #Hollywood #Bollywood #New{type_label}{year} #Trending{type_label}"
-    
     description = f"""🎬 {en_title} ({year}) - {type_label} Review & Story Explained in Bengali
-
 {story_bn}
-
 📖 Full Story:
 {overview[:300] if overview else f"An extraordinary {genre_keywords} story that will touch your heart."}
-
 🎭 Genre: {genre_keywords}
 ⭐ Rating: {rating}/10
 📅 Year: {year}
-
 🔗 Watch Full Details: {link}
 🌐 Website: https://movimoon.online
-
 👉 এই {type_bn}টি কেমন লাগলো কমেন্টে জানান!
 👉 এরকম আরো {type_bn} রিভিউ পেতে চ্যানেলটি সাবস্ক্রাইব করুন
-
 {hashtags}
-
 #movimoon #movimoononline #banglamoviereview #moviereviewbengali #newmovie{year} #upcomingmovie #moviereview
-
 ---
 Disclaimer: This video uses trailer clips under fair use for review purposes. All rights belong to respective owners.
 """
-    # Trim description to 4500 chars (YT limit 5000)
     if len(description) > 4500:
         description = description[:4500]
-    
-    # SEO Tags - max 500 chars total, 15 tags
     tags = []
     tags.append(en_title.lower())
     tags.append(bn_title.lower())
@@ -1078,27 +970,21 @@ Disclaimer: This video uses trailer clips under fair use for review purposes. Al
     tags.append("movimoon.online")
     tags.append("bengali movie review")
     tags.append("shorts")
-    # Clean tags
     clean_tags = []
     for t in tags:
         t = t.strip().lower()
-        t = t[:30]  # tag max 30 chars
+        t = t[:30]
         if t and len(t) > 1 and t not in clean_tags:
             clean_tags.append(t)
     clean_tags = clean_tags[:15]
-    
     return yt_title, description, clean_tags
 
-
 def upload_video_to_youtube(video_path, yt_title, yt_description, yt_tags):
-    """Upload video to YouTube Shorts using Data API v3 - SEO optimized"""
     if not YOUTUBE_CLIENT_ID or not YOUTUBE_CLIENT_SECRET or not YOUTUBE_REFRESH_TOKEN:
-        print("⚠️ YouTube credentials not set (YOUTUBE_CLIENT_ID/SECRET/REFRESH_TOKEN), skipping YouTube upload")
+        print("⚠ YouTube credentials not set, skipping YouTube upload")
         return None
-    
     try:
         print(f"Uploading to YouTube Shorts: {yt_title} - {Path(video_path).stat().st_size/1024/1024:.2f} MB")
-        # Import here to not break if not installed
         try:
             from google.oauth2.credentials import Credentials
             from googleapiclient.discovery import build
@@ -1109,7 +995,6 @@ def upload_video_to_youtube(video_path, yt_title, yt_description, yt_tags):
             from google.oauth2.credentials import Credentials
             from googleapiclient.discovery import build
             from googleapiclient.http import MediaFileUpload
-        
         creds = Credentials(
             None,
             refresh_token=YOUTUBE_REFRESH_TOKEN,
@@ -1118,18 +1003,14 @@ def upload_video_to_youtube(video_path, yt_title, yt_description, yt_tags):
             token_uri="https://oauth2.googleapis.com/token",
             scopes=["https://www.googleapis.com/auth/youtube.upload"]
         )
-        
         youtube = build('youtube', 'v3', credentials=creds)
-        
-        # Media upload
         media = MediaFileUpload(video_path, mimetype='video/mp4', resumable=True)
-        
         body = {
             "snippet": {
                 "title": yt_title,
                 "description": yt_description,
                 "tags": yt_tags,
-                "categoryId": "24",  # Entertainment
+                "categoryId": "24",
                 "defaultLanguage": "bn",
                 "defaultAudioLanguage": "bn"
             },
@@ -1139,30 +1020,24 @@ def upload_video_to_youtube(video_path, yt_title, yt_description, yt_tags):
                 "madeForKids": False
             }
         }
-        
         request = youtube.videos().insert(
             part="snippet,status",
             body=body,
             media_body=media
         )
-        
         response = None
         while response is None:
             status, response = request.next_chunk()
             if status:
                 print(f"YouTube upload {int(status.progress()*100)}%")
-        
         print(f"✅ YOUTUBE SHORTS UPLOADED - ID: {response.get('id')} - https://youtube.com/shorts/{response.get('id')}")
         return response
-        
     except Exception as e:
         print(f"❌ YouTube Upload Error: {e}")
         import traceback; traceback.print_exc()
-        # Quota check
         if "quota" in str(e).lower():
-            print("⚠️ YouTube quota exceeded (100/day limit). Will retry next run.")
+            print("⚠ YouTube quota exceeded (100/day limit). Will retry next run.")
         return None
-
 
 def upload_video_to_facebook(page_id, token, video_path, caption, label):
     try:
@@ -1182,7 +1057,7 @@ def upload_video_to_facebook(page_id, token, video_path, caption, label):
         return None
 
 async def main():
-    print("=== MoviMoon AutoPoster V37 SMART-TRIM 1440p 1440p FB+YT START ===")
+    print("=== MoviMoon AutoPoster V38 SMART-TRIM 1440p FB+YT START ===")
     history = load_history()
     movies = get_trending_mixed()
     if not movies:
@@ -1247,12 +1122,10 @@ async def main():
                 continue
             fb_result = upload_video_to_facebook(FB_PAGE_ID, FB_PAGE_TOKEN, final_video, caption, title)
             if fb_result:
-                # V30: PAGE POSTED = WORKFLOW DONE, no 2nd try + YT SHORTS OPTIONAL
                 print(f"✅ PAGE POSTED SUCCESSFULLY - ID: {fb_result.get('id','unknown')}")
                 history[tmdb_id] = datetime.now().isoformat()
                 save_history(history)
                 print(f"Posted {title} successfully - PAGE ONLY SUCCESS = WORK DONE")
-                # GROUP OPTIONAL - fail holeo page success = done
                 if FB_GROUP_ID and FB_GROUP_ID.strip():
                     try:
                         print(f"Attempting optional group post for {FB_GROUP_ID}...")
@@ -1260,13 +1133,11 @@ async def main():
                         if group_result:
                             print(f"✅ GROUP ALSO POSTED - ID: {group_result.get('id','unknown')}")
                         else:
-                            print(f"⚠️ Group failed but PAGE SUCCESS - WORK DONE")
+                            print(f"⚠ Group failed but PAGE SUCCESS - WORK DONE")
                     except Exception as ge:
-                        print(f"⚠️ Group error ignored: {ge} - PAGE SUCCESS = WORK DONE")
+                        print(f"⚠ Group error ignored: {ge} - PAGE SUCCESS = WORK DONE")
                 else:
                     print(f"No FB_GROUP_ID, PAGE ONLY mode")
-                
-                # YOUTUBE SHORTS OPTIONAL - SEO Optimized - fail holeo page success = done
                 try:
                     print(f"Building YouTube SEO metadata for {title}...")
                     yt_title, yt_description, yt_tags = build_youtube_seo_metadata(title, year, m_type, genre_str, rating, story_bn, link, bangla_title, overview)
@@ -1276,11 +1147,9 @@ async def main():
                     if yt_result:
                         print(f"✅ YOUTUBE SHORTS ALSO POSTED - https://youtube.com/shorts/{yt_result.get('id')}")
                     else:
-                        print(f"⚠️ YouTube upload failed/skip but PAGE SUCCESS - WORK DONE")
+                        print(f"⚠ YouTube upload failed/skip but PAGE SUCCESS - WORK DONE")
                 except Exception as ye:
-                    print(f"⚠️ YouTube error ignored: {ye} - PAGE SUCCESS = WORK DONE")
-                
-                # Cleanup
+                    print(f"⚠ YouTube error ignored: {ye} - PAGE SUCCESS = WORK DONE")
                 for f in ["trailer.mp4", "trailer_60s.mp4", "poster.jpg", "voice.mp3", "bgm.mp3", "final.mp4"]:
                     try:
                         if Path(f).exists():
@@ -1291,7 +1160,6 @@ async def main():
                 break
             else:
                 print(f"Failed to post {title}")
-            # Cleanup for failed case
             for f in ["trailer.mp4", "trailer_60s.mp4", "poster.jpg", "voice.mp3", "bgm.mp3", "final.mp4"]:
                 try:
                     if Path(f).exists():
@@ -1304,7 +1172,7 @@ async def main():
             print(f"Error processing movie {movie.get('id')}: {e}")
             import traceback; traceback.print_exc()
             continue
-    print("=== MoviMoon AutoPoster V37 END ===")
+    print("=== MoviMoon AutoPoster V38 END ===")
 
 if __name__ == "__main__":
     asyncio.run(main())
