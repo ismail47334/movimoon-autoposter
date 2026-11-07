@@ -58,7 +58,7 @@ def fetch_tmdb():
         ("https://api.themoviedb.org/3/movie/popular", {"language": "en-US", "region": "US"}),
         ("https://api.themoviedb.org/3/movie/popular", {"language": "hi-IN", "region": "IN"}),
         ("https://api.themoviedb.org/3/discover/movie", {"language": "en-US", "region": "IN", "with_original_language": "te|ta|ml|kn", "sort_by": "popularity.desc", "primary_release_date.gte": "2024-01-01"}),
-        ("https://api.themoviedb.org/3/trending/tv/day", {"language": "en-US"}),
+        ("https://api.themoviedb.org/3/trending/tv/day", {"language": "en-US", "region": "IN", "with_original_language": "te|ta|ml|kn", "sort_by": "popularity.desc", "primary_release_date.gte": "2024-01-01"}),
     ]
     
     for url, extra in urls:
@@ -240,7 +240,7 @@ def generate_story_gemini(details, duration):
     
     # Try Gemini 3.5 flash lite
     story = None
-    models_to_try = ["gemini-1.5-flash", "gemini-2.0-flash-lite", "gemini-3.5-flash-lite"]
+    models_to_try = ["gemini-3.5-flash-lite","gemini-1.5-flash", "gemini-2.0-flash-lite", "gemini-3.8-flash"]
     # Use google-generativeai
     try:
         import google.generativeai as genai_old
