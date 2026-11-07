@@ -617,7 +617,7 @@ Return JSON only.
         "gemini-3.1-pro-preview"
     ]
 
-    def smart_expand_to_limit(current_voice, current_wc, target_min=165, target_max=170):
+    def smart_expand_to_limit(current_voice, current_wc, target_min=155, target_max=160):
         expansions = [
             f"এই {genre_str_bn or 'গল্প'}তে প্রতিটি দৃশ্য গল্পের সাথে জড়িত।",
             "পরিচালকের গল্প বলার ধরন দর্শককে ধরে রাখবে।",
