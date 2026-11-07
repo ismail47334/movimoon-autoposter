@@ -1,4 +1,4 @@
-name: MoviMoon V43 - FINAL - REST TTS + FFmpeg FIXED
+name: MoviMoon V44 - HOTFIX - History Bug Fixed
 
 on:
   schedule:
@@ -18,7 +18,7 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install FFmpeg + Node + yt-dlp + POT - V43 FIXED
+      - name: Install FFmpeg + Node + yt-dlp + POT - V44 FIXED
         run: |
           sudo apt-get update -y
           sudo apt-get install -y ffmpeg fonts-noto-core fonts-dejavu
@@ -31,15 +31,15 @@ jobs:
           python -m pip install -U requests --upgrade
           python -m yt_dlp --version
 
-      - name: Clean old cookies - V43 NO FAKE COOKIE
+      - name: Clean old cookies - V44 NO FAKE COOKIE
         run: |
           rm -f cookies.txt youtube_oauth_token.json
           rm -rf output
           rm -f voice_text.txt temp_gemini_tts_runner.py gemini_tts_output.mp3 voice_final.wav
-          echo "V43 FIXED: No fake cookies.txt - truly NO COOKIE mode + REST TTS"
+          echo "V44 FIXED: History bug fixed + REST TTS + No fake cookies"
           ls -lh
 
-      - name: Run MoviMoon V43 FINAL
+      - name: Run MoviMoon V44 HOTFIX
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
           FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
@@ -62,5 +62,5 @@ jobs:
           git config --global user.name 'MoviMoon Bot'
           git config --global user.email 'bot@movimoon.online'
           git add posted_history.json || true
-          git diff --staged --quiet || git commit -m "Update history V43 FINAL REST TTS [skip ci]" || true
+          git diff --staged --quiet || git commit -m "Update history V44 HOTFIX [skip ci]" || true
           git push || true
