@@ -1,4 +1,4 @@
-name: MoviMoon V37 - LATEST FIXED - Nov 4 Researched
+name: MoviMoon V38 - FIXED - Residential Proxy + Gemini TTS
 
 on:
   schedule:
@@ -18,7 +18,7 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install FFmpeg + Node + yt-dlp + POT - V37 LATEST FIXED
+      - name: Install FFmpeg + Node + yt-dlp + POT - V38 FIXED
         run: |
           sudo apt-get update -y
           sudo apt-get install -y ffmpeg fonts-noto-core
@@ -31,13 +31,13 @@ jobs:
           python -m pip install -U google-genai --upgrade
           python -m yt_dlp --version
 
-      - name: Clean old cookies - Method1 NO COOKIE
+      - name: Clean old cookies - V38 NO FAKE COOKIE
         run: |
           rm -f cookies.txt youtube_oauth_token.json
-          echo "# V37 LATEST FIXED NO COOKIE - tv_downgraded + android_vr + web_embedded + mweb" > cookies.txt
+          echo "V38 FIXED: No fake cookies.txt - truly NO COOKIE mode"
           ls -lh
 
-      - name: Run MoviMoon V37 LATEST - Nov 4 Researched
+      - name: Run MoviMoon V38 FIXED
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
           FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
@@ -50,6 +50,7 @@ jobs:
           YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
           YOUTUBE_CHANNEL_ID: ${{ secrets.YOUTUBE_CHANNEL_ID }}
           YOUTUBE_PROXY: ${{ secrets.YOUTUBE_PROXY }}
+          YOUTUBE_PROXY_LIST: ${{ secrets.YOUTUBE_PROXY_LIST }}
         run: |
           python -u movimoon-video-autoposter.py
 
@@ -59,5 +60,5 @@ jobs:
           git config --global user.name 'MoviMoon Bot'
           git config --global user.email 'bot@movimoon.online'
           git add posted_history.json || true
-          git diff --staged --quiet || git commit -m "Update history V37 LATEST FIXED Nov 4 [skip ci]" || true
+          git diff --staged --quiet || git commit -m "Update history V38 FIXED [skip ci]" || true
           git push || true
