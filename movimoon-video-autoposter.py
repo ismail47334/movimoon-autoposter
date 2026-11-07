@@ -2,7 +2,7 @@ import os, requests, random, re, time, asyncio, json, subprocess, pathlib
 from datetime import datetime, timedelta
 from pathlib import Path
 
-print("=== MoviMoon Bot - V45 FINAL | V38 EXACT + History Fix + REST Fenrir TTS ===")
+print("=== MoviMoon Bot - V46 FINAL | V38 EXACT + History Fix + REST Fenrir TTS + FFMPEG CHAIN FIX ===")
 
 try:
     import edge_tts
@@ -43,7 +43,6 @@ def slugify(text):
     return text[:60]
 
 def load_history():
-    # V45 FIX: Tolerant to both dict {"123":"date"} and list [123, {"id":123}, "123"]
     try:
         if os.path.exists(HISTORY_FILE):
             with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
@@ -56,15 +55,14 @@ def load_history():
                     for item in data:
                         try:
                             if isinstance(item, dict):
-                                vid = item.get("id") or item.get("movie_id") or item.get("movieId")
+                                vid = item.get("id") or item.get("movie_id")
                                 if vid is not None:
                                     hist[str(vid)] = item.get("date", datetime.now().isoformat())
                             elif isinstance(item, (int, float)):
                                 hist[str(int(item))] = "old"
                             elif isinstance(item, str):
-                                s = item.strip().strip('"').strip("'")
+                                s = item.strip()
                                 if s:
-                                    # try parse if json string
                                     try:
                                         inner = json.loads(s)
                                         if isinstance(inner, dict) and "id" in inner:
@@ -73,13 +71,12 @@ def load_history():
                                             hist[s] = "old"
                                     except:
                                         hist[s] = "old"
-                        except Exception as e:
-                            print(f"History parse skip {item}: {e}")
+                        except:
                             continue
                     print(f"Converted list history to dict: {len(hist)} ids")
                     return hist
     except Exception as e:
-        print(f"History load fail: {e}, starting fresh")
+        print(f"History load fail: {e}")
     return {}
 
 def save_history(history):
@@ -98,8 +95,6 @@ def is_already_posted(tmdb_id, history, days=30):
         if datetime.now() - last_date < timedelta(days=days):
             return True
     except:
-        # if "old" or invalid date, treat as already posted to avoid repost within 30d
-        # For "old" entries, we consider them posted (safer)
         return True
     return False
 
@@ -162,13 +157,12 @@ def get_youtube_trailer(movie):
         def is_valid_trailer(v):
             if v.get('site') != 'YouTube':
                 return False
-            v_type = v.get('type','').lower()
             name = v.get('name','').lower()
             block_keywords = ['muhurat', 'mahurat', 'muhurath', 'making', 'behind', 'bts', 'featurette', 'interview', 'clip', 'scene', 'song', 'lyrical', 'audio', 'first look', 'announcement', 'motion poster', 'poster', 'greeting', 'launch', 'event']
             for kw in block_keywords:
                 if kw in name:
                     return False
-            if v_type in ['trailer', 'teaser']:
+            if v.get('type','').lower() in ['trailer', 'teaser']:
                 return True
             return False
         valid = [v for v in results if is_valid_trailer(v)]
@@ -201,30 +195,24 @@ def get_video_duration(video_path):
     except:
         return 0
 
-# === V38 FIXED RESIDENTIAL PROXY PARSER ===
 def parse_proxy_line(line):
     line = line.strip()
     if not line or line.startswith("#"):
         return None
-    # Format: IP:PORT:USER:PASS -> http://USER:PASS@IP:PORT
-    # Or: IP:PORT
-    # Or: http://USER:PASS@IP:PORT (already)
     if line.startswith("http://") or line.startswith("https://"):
         return line
     parts = line.split(":")
-    if len(parts) == 4:  # IP:PORT:USER:PASS
+    if len(parts) == 4:
         ip, port, user, pwd = parts
         return f"http://{user}:{pwd}@{ip}:{port}"
-    elif len(parts) == 2: # IP:PORT
+    elif len(parts) == 2:
         return f"http://{line}"
     return None
 
 def get_residential_proxies():
-    """V38: Read YOUTUBE_PROXY_LIST and YOUTUBE_PROXY secrets"""
     proxies = []
     proxy_list_raw = os.getenv("YOUTUBE_PROXY_LIST", "")
     single_proxy = os.getenv("YOUTUBE_PROXY", "")
-    
     if proxy_list_raw:
         lines = proxy_list_raw.strip().splitlines()
         for line in lines:
@@ -232,13 +220,11 @@ def get_residential_proxies():
             if p and p not in proxies:
                 proxies.append(p)
         print(f"Residential: Found {len(proxies)} proxies from YOUTUBE_PROXY_LIST")
-    
     if single_proxy:
         sp = parse_proxy_line(single_proxy)
         if sp and sp not in proxies:
             proxies.insert(0, sp)
             print(f"Residential: Added single YOUTUBE_PROXY")
-    
     return proxies
 
 def get_free_proxies():
@@ -260,8 +246,6 @@ def get_free_proxies():
 def download_via_ytdlp_fixed(youtube_url, output="trailer.mp4"):
     print(f"=== YT-DLP V38 FIXED {youtube_url} ===")
     Path(output).unlink(missing_ok=True)
-    
-    # V38 FIX: Delete fake cookies.txt (<200 bytes)
     if Path("cookies.txt").exists():
         size = Path("cookies.txt").stat().st_size
         if size < 200:
@@ -269,7 +253,6 @@ def download_via_ytdlp_fixed(youtube_url, output="trailer.mp4"):
             Path("cookies.txt").unlink(missing_ok=True)
         else:
             print(f"Keeping real cookies.txt {size} bytes")
-
     method1_strategies = [
         {"name": "M1-tv_downgraded+android_vr+web_embedded BEST 2026", "args": '--js-runtimes node --remote-components ejs:github --extractor-args "youtube:player_client=tv_downgraded,android_vr,web_embedded,mweb" -f "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best" --merge-output-format mp4'},
         {"name": "M1-tv+android_vr+web_embedded", "args": '--js-runtimes node --remote-components ejs:github --extractor-args "youtube:player_client=tv,android_vr,web_embedded,mweb" -f "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best" --merge-output-format mp4'},
@@ -278,7 +261,6 @@ def download_via_ytdlp_fixed(youtube_url, output="trailer.mp4"):
         {"name": "M1-mweb+tv_simply", "args": '--extractor-args "youtube:player_client=mweb,tv_simply" -f "best[height<=720]/best" --merge-output-format mp4'},
         {"name": "M1-android_vr", "args": '--extractor-args "youtube:player_client=android_vr" -f "best[height<=1080]/best" --merge-output-format mp4'},
     ]
-
     print(">>> METHOD 1: NO COOKIE, NO PROXY")
     for idx, strat in enumerate(method1_strategies, 1):
         cmd = f'yt-dlp {strat["args"]} -o "{output}" "{youtube_url}" --no-playlist --no-warnings --retries 3 --fragment-retries 3 2>&1'
@@ -295,21 +277,14 @@ def download_via_ytdlp_fixed(youtube_url, output="trailer.mp4"):
         except Exception as e:
             print(f"  ERROR M1 {e}")
             continue
-
     print(">>> METHOD 2: RESIDENTIAL PROXY (YOUTUBE_PROXY_LIST secret)")
     residential_proxies = get_residential_proxies()
     if residential_proxies:
-        for p_idx, proxy in enumerate(residential_proxies[:10], 1): # Try max 10 residential
+        for p_idx, proxy in enumerate(residential_proxies[:10], 1):
             safe_proxy = proxy.replace('"', '')
-            # Mask password in log
-            log_proxy = safe_proxy
-            if "@" in log_proxy:
-                try:
-                    log_proxy = log_proxy.split("@")[-1]
-                except:
-                    log_proxy = log_proxy[:20] + "..."
+            log_proxy = safe_proxy.split("@")[-1] if "@" in safe_proxy else safe_proxy[:20]
             print(f"  [M2-Residential {p_idx}/{len(residential_proxies)}] {log_proxy}...")
-            for strat in method1_strategies[:2]: # Only top 2 strategies for speed
+            for strat in method1_strategies[:2]:
                 cmd = f'yt-dlp --proxy "{safe_proxy}" {strat["args"]} -o "{output}" "{youtube_url}" --no-playlist --no-warnings --retries 2 --socket-timeout 30 2>&1'
                 try:
                     result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=120)
@@ -323,7 +298,6 @@ def download_via_ytdlp_fixed(youtube_url, output="trailer.mp4"):
                     continue
     else:
         print("  M2 No residential proxies found in secrets, skipping to METHOD 3")
-
     print(">>> METHOD 3: FREE PROXY FALLBACK")
     free_proxies = get_free_proxies()
     if free_proxies:
@@ -344,7 +318,6 @@ def download_via_ytdlp_fixed(youtube_url, output="trailer.mp4"):
                     continue
     else:
         print("  M3 No free proxies")
-
     print(">>> ALL 3 METHODS FAILED - Final fallback no proxy")
     try:
         cmd = f'yt-dlp --js-runtimes node --remote-components ejs:github -f "best" --merge-output-format mp4 -o "{output}" "{youtube_url}" --no-playlist --no-warnings --retries 1 2>&1'
@@ -600,21 +573,17 @@ def call_gemini_video_script(title, year, m_type, rating, overview, link, movie=
     genre_str = get_genre_names(movie.get("genre_ids", []) if movie else [], english=True)
     genre_str_bn = get_genre_names(movie.get("genre_ids", []) if movie else [], english=False)
     title_raw = title
-    
     if not GEMINI_API_KEY and not GROQ_API_KEY:
         story_bn = "এক অসাধারণ রহস্যময় গল্পের জগত!"
         voice = f"বন্ধুরা আজকে কথা বলবো {year} সালের সিনেমা {title_raw} নিয়ে।"
         return voice, story_bn, title_raw
-
     if trailer_duration < 5:
         trailer_duration = 60
     if target_words is None or target_words == 0:
         target_words = int(trailer_duration * 2.66)
         target_words = max(75, min(170, target_words))
-    
     target_min = max(70, target_words - 5)
     target_max = target_words
-
     genre_lower = genre_str.lower()
     genre_direction = ""
     if any(x in genre_lower for x in ["action", "thriller"]):
@@ -631,7 +600,6 @@ def call_gemini_video_script(title, year, m_type, rating, overview, link, movie=
         genre_direction = "COMEDY: Lively delivery"
     else:
         genre_direction = "GENERAL: Focus on central premise"
-
     prompt = f"""# MOVIMOON CINEMATIC REVIEW MASTER PROMPT - V38
 Title: {title} Year: {year} Type: {m_type} Genre: {genre_str} Rating: {rating}/10 Synopsis: {overview} Link: {link} Target: {trailer_duration:.0f}s Words: {target_min}-{target_max}
 Genre Direction: {genre_direction}
@@ -640,7 +608,6 @@ CRITICAL: EXACTLY {target_min}-{target_max} words MAX {target_max}. MUST include
 OUTPUT JSON ONLY: {{"voiceover": "{target_min}-{target_max} words...", "bangla_title": "title", "caption": "summary", "word_count": {target_min}}}
 Return JSON only.
 """
-
     models = [
         "gemini-3.8-flash",
         "gemini-3.5-flash-lite",
@@ -649,7 +616,6 @@ Return JSON only.
         "gemini-4-argon",
         "gemini-3.1-pro-preview"
     ]
-
     def smart_expand_to_limit(current_voice, current_wc, target_min=165, target_max=170):
         expansions = [
             f"এই {genre_str_bn or 'গল্প'}তে প্রতিটি দৃশ্য গল্পের সাথে জড়িত।",
@@ -680,12 +646,11 @@ Return JSON only.
             result = " ".join(words[:target_max])
             cw = target_max
         return result, cw
-
     for model in models:
         try:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
             data = {"contents":[{"parts":[{"text":prompt}]}], "generationConfig":{"temperature":0.7, "topP":0.9, "maxOutputTokens": 4096, "response_mime_type": "application/json"}}
-            res = requests.post(url, json=data, timeout=30)
+            res = requests.post(url, json=data, timeout=45)
             if res.status_code == 200:
                 js = res.json()
                 try:
@@ -714,7 +679,7 @@ TASK: Expand to EXACTLY {target_min}-{target_max} Bengali words. Keep all conten
 MUST say "মুভিমুন ডট অনলাইন" not "মুভিমুন অনলাইন ডট কম".
 OUTPUT ONLY JSON: {{"voiceover": "{target_min}-{target_max} words...", "bangla_title": "title", "caption": "...", "word_count": {target_min}}}"""
                                 data_loop = {"contents":[{"parts":[{"text":expand_prompt}]}], "generationConfig":{"temperature":0.7, "topP":0.9, "maxOutputTokens": 4096, "response_mime_type": "application/json"}}
-                                res_loop = requests.post(url, json=data_loop, timeout=30)
+                                res_loop = requests.post(url, json=data_loop, timeout=45)
                                 if res_loop.status_code == 200:
                                     js_loop = res_loop.json()
                                     text_loop = js_loop["candidates"][0]["content"]["parts"][0]["text"]
@@ -788,25 +753,31 @@ def build_caption(title, year, m_type, genre_str, rating, story_bn, link):
     caption = f"🎬 {type_label} - {title}({year})\n🎭 Genres - {genre_str}\n⭐ Rating - {rating}/10\n{story_text}\n🔗 ফুল মুভি লিংক: {link}\n👉 পুরো রিভিউ এবং ডাউনলোড পেতে ভিজিট করুন movimoon.online\n#MoviMoon #MovieReview #TrendingNow #MustWatch #BengaliReview #ViralReels\n#S #{title.replace(' ', '').replace('-', '')}"
     return caption
 
-# === V45 FINAL: GEMINI TTS - REST API + Fenrir + Energetic Prompt ===
-GEMINI_TTS_MODELS = ["gemini-3.8-flash-tts", "gemini-3.8-flash-lite-tts", "gemini-2.5-flash-preview-tts", "gemini-2.5-flash-lite-preview-tts"]
+# === V46: GEMINI TTS - REST API + Fenrir + speech_metadata (DOC COMPLIANT) ===
+GEMINI_TTS_MODELS = ["gemini-3.8-flash-tts", "gemini-3.8-flash-lite-tts"]
 GEMINI_TTS_VOICE_NAME = "Fenrir"
-GEMINI_TTS_PROMPT_PREFIX = "[Speak in a highly energetic, thrilling, fast-paced Bangladeshi young male voice, perfect for movie explanation]"
+GEMINI_TTS_STYLE = "highly energetic, thrilling, fast-paced Bangladeshi young male voice, perfect for movie explanation"
 
 def generate_tts_with_gemini(text, output_path="voice.mp3"):
     if not GEMINI_API_KEY:
         print("Gemini TTS: No API key")
         return False
     import base64
-    full_text = f"{GEMINI_TTS_PROMPT_PREFIX} {text}".strip()
-    print(f"Gemini TTS V45 REST: {len(full_text.split())} words voice {GEMINI_TTS_VOICE_NAME}")
-
+    print(f"Gemini TTS V46 DOC: {len(text.split())} words voice {GEMINI_TTS_VOICE_NAME}")
     for tts_model in GEMINI_TTS_MODELS:
         try:
-            print(f"Gemini TTS: Trying {tts_model} with Fenrir...")
+            print(f"Gemini TTS: Trying {tts_model} with Fenrir + speech_metadata...")
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{tts_model}:generateContent?key={GEMINI_API_KEY}"
             payload = {
-                "contents": [{"parts": [{"text": full_text}]}],
+                "contents": [{
+                    "parts": [{
+                        "text": text,
+                        "speech_metadata": {
+                            "speaker": GEMINI_TTS_VOICE_NAME,
+                            "style": GEMINI_TTS_STYLE
+                        }
+                    }]
+                }],
                 "generationConfig": {
                     "responseModalities": ["AUDIO"],
                     "speechConfig": {
@@ -826,35 +797,28 @@ def generate_tts_with_gemini(text, output_path="voice.mp3"):
                     if 'inlineData' in p and 'data' in p['inlineData']:
                         b64_data = p['inlineData']['data']
                         break
-                    if 'inline_data' in p and 'data' in p['inline_data']:
-                        b64_data = p['inline_data']['data']
-                        break
                 if not b64_data:
                     print(f"TTS {tts_model} no inlineData: {str(data)[:800]}")
                     continue
                 audio_bytes = base64.b64decode(b64_data)
-                # Gemini returns raw PCM/WAV, save as mp3 container via ffmpeg later
-                temp_raw = "gemini_raw_audio.bin"
-                with open(temp_raw, "wb") as f:
+                # Doc says default is WAV with RIFF header, save as wav then convert to mp3
+                temp_wav = "voice_temp.wav"
+                with open(temp_wav, "wb") as f:
                     f.write(audio_bytes)
-                # Convert raw to mp3 with ffmpeg - assume 24kHz PCM if needed, but try direct
-                # First try: if it's already wav/mp3, just copy and polish
-                with open(output_path, "wb") as f:
-                    f.write(audio_bytes)
-                # If file is not playable, ffmpeg will convert
-                if Path(output_path).stat().st_size < 1000:
-                    continue
-                # Light polish to remove tune noise: highpass + lowpass + loudnorm
-                studio_path = output_path.replace(".mp3", "_studio.mp3")
-                cmd = f'ffmpeg -y -i "{output_path}" -filter:a "highpass=f=80,lowpass=f=12000,acompressor=threshold=-20dB:ratio=3:attack=5:release=50,loudnorm=I=-16:TP=-1.5:LRA=7,volume=1.1" -c:a libmp3lame -q:a 0 -ar 48000 "{studio_path}"'
+                # Convert WAV to polished MP3
+                cmd = f'ffmpeg -y -i "{temp_wav}" -filter:a "highpass=f=80,lowpass=f=12000,acompressor=threshold=-20dB:ratio=3:attack=5:release=50,loudnorm=I=-16:TP=-1.5:LRA=7,volume=1.1" -c:a libmp3lame -q:a 0 -ar 48000 "{output_path}"'
                 subprocess.run(cmd, shell=True, capture_output=True, timeout=20)
-                if Path(studio_path).exists() and Path(studio_path).stat().st_size > 1000:
-                    Path(studio_path).replace(output_path)
-                    print(f"Gemini TTS V45 Polish applied")
-                if Path(temp_raw).exists():
-                    Path(temp_raw).unlink(missing_ok=True)
-                print(f"Gemini TTS SUCCESS - Model {tts_model} - {Path(output_path).stat().st_size/1024:.1f} KB saved to {output_path}")
-                return True
+                if Path(temp_wav).exists():
+                    Path(temp_wav).unlink(missing_ok=True)
+                if Path(output_path).exists() and Path(output_path).stat().st_size > 1000:
+                    print(f"Gemini TTS SUCCESS - Model {tts_model} - {Path(output_path).stat().st_size/1024:.1f} KB saved to {output_path}")
+                    return True
+                else:
+                    # fallback direct write
+                    with open(output_path, "wb") as f:
+                        f.write(audio_bytes)
+                    if Path(output_path).stat().st_size > 1000:
+                        return True
             else:
                 print(f"Gemini TTS FAILED {tts_model}: {r.status_code} {r.text[:600]}")
                 continue
@@ -871,7 +835,7 @@ async def generate_tts_voice(text, output_path="voice.mp3"):
     if gemini_success:
         print(f"Using Gemini TTS voice - {GEMINI_TTS_VOICE_NAME} - SUCCESS")
         return output_path
-    print(f"Gemini TTS failed or not available, FALLBACK to Edge TTS {VOICE}")
+    print(f"Gemini TTS failed, FALLBACK to Edge TTS {VOICE}")
     communicate = edge_tts.Communicate(text, VOICE, rate=RATE, pitch=PITCH, volume=VOLUME)
     await communicate.save(output_path)
     try:
@@ -920,20 +884,22 @@ def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp
             if not Path(font_path).exists():
                 font_path = "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
         print(f"Creating {dur}s video FINAL V38 FIXED-TRIM + V39 MASTER PROMPT 1440p SMART-TRIM ZOOM 65% 2K - Top: {label_top_safe} | {safe_title} | Type: {m_type}")
+        # V46 FIX: Chained filter_complex with proper labels to avoid "Cannot find an unused video input stream" error
         if poster_path and Path(poster_path).exists():
             cmd = (
                 f"ffmpeg -y -loop 1 -t {dur} -i \"{poster_path}\" "
                 f"-i \"{trailer_path}\" -i \"{voice_path}\" -stream_loop -1 -i \"{bgm_path}\" "
-                f"-filter_complex \"[0:v]scale=1440:2560:force_original_aspect_ratio=increase,crop=1440:2560,gblur=sigma=25:steps=2,setsar=1,trim=duration={dur}[bg];"
+                f"-filter_complex \""
+                f"[0:v]scale=1440:2560:force_original_aspect_ratio=increase,crop=1440:2560,gblur=sigma=25:steps=2,setsar=1,trim=duration={dur}[bg];"
                 f"[1:v]scale=1440:1664:force_original_aspect_ratio=increase,crop=1440:1664,setsar=1[fg];"
-                f"[bg][fg]overlay=(W-w)/2:(H-h)/2:shortest=0,scale=1440:2560:flags=lanczos;"
-                f"drawtext=text='{label_top_safe}':fontcolor=white:fontsize=50:box=1:boxcolor=black@0.70:boxborderw=13:borderw=2:bordercolor=black:"
-                f"x=(w-text_w)/2:y=90+4*sin(t*1.8):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path};"
-                f"drawtext=text='{safe_title}':fontcolor=white:fontsize=82:box=1:boxcolor=black@0.75:boxborderw=18:borderw=4:bordercolor=black:"
+                f"[bg][fg]overlay=(W-w)/2:(H-h)/2:shortest=0,scale=1440:2560:flags=lanczos[base];"
+                f"[base]drawtext=text='{label_top_safe}':fontcolor=white:fontsize=50:box=1:boxcolor=black@0.70:boxborderw=13:borderw=2:bordercolor=black:"
+                f"x=(w-text_w)/2:y=90+4*sin(t*1.8):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[t1];"
+                f"[t1]drawtext=text='{safe_title}':fontcolor=white:fontsize=82:box=1:boxcolor=black@0.75:boxborderw=18:borderw=4:bordercolor=black:"
                 f"x=(w-text_w)/2:y=160+5*sin(t*1.8):shadowcolor=black:shadowx=5:shadowy=5:fontfile={font_path}[base_top];"
                 f"[base_top]drawtext=text='Watch on':fontcolor=white:fontsize=48:box=1:boxcolor=black@0.70:boxborderw=13:borderw=2:bordercolor=black:"
-                f"x=(w-text_w)/2:y=h-260-4*sin(t*2.2):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path};"
-                f"drawtext=text='movimoon.online':fontcolor=yellow:fontsize=70:box=1:boxcolor=black@0.75:boxborderw=18:borderw=4:bordercolor=black:"
+                f"x=(w-text_w)/2:y=h-260-4*sin(t*2.2):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[t2];"
+                f"[t2]drawtext=text='movimoon.online':fontcolor=yellow:fontsize=70:box=1:boxcolor=black@0.75:boxborderw=18:borderw=4:bordercolor=black:"
                 f"x=(w-text_w)/2:y=h-190-5*sin(t*2.2):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[final_v];"
                 f"[1:a]volume=0.30[trailer_low];[3:a]volume=0.40[bg_vol];[2:a]asplit=2[voice_sc][voice_mix];"
                 f"[bg_vol][voice_sc]sidechaincompress=threshold=0.015:ratio=8:attack=20:release=400:makeup=1[ducked];"
@@ -943,31 +909,32 @@ def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp
         else:
             cmd = (
                 f"ffmpeg -y -i \"{trailer_path}\" -i \"{voice_path}\" -stream_loop -1 -i \"{bgm_path}\" "
-                f"-filter_complex \"[0:v]scale=1440:2560:force_original_aspect_ratio=increase,crop=1440:2560,gblur=sigma=25:steps=2[bg];"
+                f"-filter_complex \""
+                f"[0:v]scale=1440:2560:force_original_aspect_ratio=increase,crop=1440:2560,gblur=sigma=25:steps=2[bg];"
                 f"[0:v]scale=1440:1664:force_original_aspect_ratio=increase,crop=1440:1664[fg];"
-                f"[bg][fg]overlay=(W-w)/2:(H-h)/2,scale=1440:2560:flags=lanczos;"
-                f"drawtext=text='{label_top_safe}':fontcolor=white:fontsize=50:box=1:boxcolor=black@0.70:boxborderw=13:borderw=2:bordercolor=black:"
-                f"x=(w-text_w)/2:y=90+4*sin(t*1.8):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path};"
-                f"drawtext=text='{safe_title}':fontcolor=white:fontsize=82:box=1:boxcolor=black@0.75:boxborderw=18:borderw=4:bordercolor=black:"
+                f"[bg][fg]overlay=(W-w)/2:(H-h)/2,scale=1440:2560:flags=lanczos[base];"
+                f"[base]drawtext=text='{label_top_safe}':fontcolor=white:fontsize=50:box=1:boxcolor=black@0.70:boxborderw=13:borderw=2:bordercolor=black:"
+                f"x=(w-text_w)/2:y=90+4*sin(t*1.8):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[t1];"
+                f"[t1]drawtext=text='{safe_title}':fontcolor=white:fontsize=82:box=1:boxcolor=black@0.75:boxborderw=18:borderw=4:bordercolor=black:"
                 f"x=(w-text_w)/2:y=160+5*sin(t*1.8):shadowcolor=black:shadowx=5:shadowy=5:fontfile={font_path}[base_top];"
                 f"[base_top]drawtext=text='Watch on':fontcolor=white:fontsize=48:box=1:boxcolor=black@0.70:boxborderw=13:borderw=2:bordercolor=black:"
-                f"x=(w-text_w)/2:y=h-260-4*sin(t*2.2):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path};"
-                f"drawtext=text='movimoon.online':fontcolor=yellow:fontsize=70:box=1:boxcolor=black@0.75:boxborderw=18:borderw=4:bordercolor=black:"
+                f"x=(w-text_w)/2:y=h-260-4*sin(t*2.2):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[t2];"
+                f"[t2]drawtext=text='movimoon.online':fontcolor=yellow:fontsize=70:box=1:boxcolor=black@0.75:boxborderw=18:borderw=4:bordercolor=black:"
                 f"x=(w-text_w)/2:y=h-190-5*sin(t*2.2):shadowcolor=black:shadowx=4:shadowy=4:fontfile={font_path}[final_v];"
                 f"[0:a]volume=0.30[trailer_low];[2:a]volume=0.40[bg_vol];[1:a]asplit=2[voice_sc][voice_mix];"
                 f"[bg_vol][voice_sc]sidechaincompress=threshold=0.015:ratio=8:attack=20:release=400:makeup=1[ducked];"
                 f"[trailer_low][ducked][voice_mix]amix=inputs=3:duration=longest:dropout_transition=0:weights=0.30 0.35 1,volume=1.25,loudnorm=I=-16:TP=-1.5:LRA=8[a]\" "
                 f"-map \"[final_v]\" -map \"[a]\" -c:v libx264 -profile:v high -level:v 4.2 -preset fast -crf 20 -pix_fmt yuv420p -r 30 -movflags +faststart -c:a aac -b:a 192k -t {dur} \"{output}\""
             )
-        print(f"FFmpeg FINAL V38 {dur}s...")
+        print(f"FFmpeg FINAL V46 CHAIN FIX {dur}s...")
         result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=600)
         if Path(output).exists() and Path(output).stat().st_size > 50000:
-            print(f"Final OK V38 SMART-TRIM 1440p {Path(output).stat().st_size/1024/1024:.2f} MB")
+            print(f"Final OK V46 CHAIN FIX 1440p {Path(output).stat().st_size/1024/1024:.2f} MB")
             return output
-        print(f"FFmpeg err {result.stderr[-1500:]}")
+        print(f"FFmpeg err {result.stderr[-2000:]}")
         return None
     except Exception as e:
-        print(f"V38 Error {e}")
+        print(f"V46 Error {e}")
         import traceback; traceback.print_exc()
         return None
 
