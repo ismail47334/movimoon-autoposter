@@ -956,7 +956,7 @@ def build_youtube_seo_metadata(title, year, m_type, genre_str, rating, story_bn,
     bn_title = bangla_title.strip() if bangla_title else en_title
     type_label = "Movie" if m_type == "movie" else "Web Series"
     type_bn = "সিনেমা" if m_type == "movie" else "সিরিজ"
-    base_title = f"{bn_title} | {en_title} ({year})"
+    base_title = f"{en_title} | {en_title} ({year})"
     if len(base_title) > 70:
         base_title = f"{en_title} ({year})"
     if len(base_title) > 80:
