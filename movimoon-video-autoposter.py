@@ -2,7 +2,7 @@ import os, requests, random, re, time, asyncio, json, subprocess, pathlib
 from datetime import datetime, timedelta
 from pathlib import Path
 
-print("=== MoviMoon Bot - V49 FINAL | V46 BASELINE LOCKED + FB NATIVE REELS API FIX ===")
+print("=== MoviMoon Bot - V50 FINAL | V46 BASELINE LOCKED + FB REELS upload_url FIX + YT TAG NOISE REMOVED ===")
 
 try:
     import edge_tts
@@ -1077,46 +1077,8 @@ def upload_video_to_youtube(video_path, yt_title, yt_description, yt_tags):
                 print(f"YouTube upload {int(status.progress()*100)}%")
         vid_id = response.get('id')
         print(f"✅ YOUTUBE SHORTS UPLOADED - ID: {vid_id} - https://youtube.com/shorts/{vid_id} | Tags sent in insert: {yt_tags}")
-        # === V48 TAG FIX: Try update with broader scope, fallback gracefully if token lacks scope ===
-        if yt_tags and vid_id:
-            try:
-                print(f"V48 TAG FIX: Attempting tag update for {vid_id}...")
-                # Try with full youtube scope for update (requires token with youtube scope)
-                creds_full = Credentials(
-                    None,
-                    refresh_token=YOUTUBE_REFRESH_TOKEN,
-                    client_id=YOUTUBE_CLIENT_ID,
-                    client_secret=YOUTUBE_CLIENT_SECRET,
-                    token_uri="https://oauth2.googleapis.com/token",
-                    scopes=["https://www.googleapis.com/auth/youtube"]
-                )
-                youtube_full = build('youtube', 'v3', credentials=creds_full)
-                update_body = {
-                    "id": vid_id,
-                    "snippet": {
-                        "title": yt_title,
-                        "description": yt_description,
-                        "tags": yt_tags,
-                        "categoryId": "24",
-                        "defaultLanguage": "bn",
-                        "defaultAudioLanguage": "bn"
-                    }
-                }
-                update_response = youtube_full.videos().update(
-                    part="snippet",
-                    body=update_body
-                ).execute()
-                print(f"✅ YOUTUBE TAGS UPDATED via full scope - {update_response.get('snippet', {}).get('tags', [])}")
-            except Exception as tag_err:
-                err_str = str(tag_err)
-                if "invalid_scope" in err_str:
-                    print(f"⚠ TAG UPDATE skipped: Your YOUTUBE_REFRESH_TOKEN only has 'youtube.upload' scope, not 'youtube' scope.")
-                    print(f"   → Tags were already sent in insert request, so they SHOULD appear in Studio.")
-                    print(f"   → To enable separate tag update, regenerate token with BOTH scopes: youtube + youtube.upload")
-                    print(f"   → But current upload SUCCESS with tags: {yt_tags}")
-                else:
-                    print(f"⚠ YouTube TAG UPDATE FAILED (but video already uploaded with tags in insert): {tag_err}")
-                import traceback; traceback.print_exc()
+        # V50: Tags already sent in insert() - NO separate update() needed. Skipping to avoid invalid_scope noise.
+        print(f"V50 YT: Tags already in insert, skipping separate update (avoids invalid_scope)")
         return response
     except Exception as e:
         print(f"❌ YouTube Upload Error: {e}")
@@ -1126,31 +1088,37 @@ def upload_video_to_youtube(video_path, yt_title, yt_description, yt_tags):
         return None
 
 def upload_video_to_facebook_reels(page_id, token, video_path, caption, label):
-    # V49: Native Facebook Reels API - 3 phases: start -> rupload -> finish/publish
+    # V50: Native Facebook Reels API - 3 phases: start -> rupload -> finish/publish
     # Old code used /videos which lands in Videos tab, NOT Reels tab = no Reels feed distribution
     try:
         file_size = Path(video_path).stat().st_size
-        print(f"V49 REELS: Uploading {label} as NATIVE REEL - {file_size/1024/1024:.2f} MB")
+        print(f"V50 REELS: Uploading {label} as NATIVE REEL - {file_size/1024/1024:.2f} MB")
         # PHASE 1: START
         start_url = f"https://graph.facebook.com/v21.0/{page_id}/video_reels"
         r1 = requests.post(start_url, data={"upload_phase": "start", "file_size": file_size, "access_token": token}, timeout=60)
-        print(f"V49 REELS START Status {r1.status_code} {r1.text[:500]}")
+        print(f"V50 REELS START Status {r1.status_code} {r1.text[:500]}")
         if r1.status_code != 200:
-            print("V49 REELS START failed, falling back to /videos")
+            print("V50 REELS START failed, falling back to /videos")
             return None
         video_id = r1.json().get("video_id")
         if not video_id:
-            print("V49 REELS: no video_id, fallback")
+            print("V50 REELS: no video_id, fallback")
             return None
-        # PHASE 2: UPLOAD bytes to rupload.facebook.com with OAuth header
+        # V50 FIX: Use EXACT upload_url returned by START (v27.0 path) - NOT constructed /video/{id}
+        # Log proved: START returned https://rupload.facebook.com/video-upload/v27.0/{id}
+        # My V49 used https://rupload.facebook.com/video/{id} -> 400 InvalidEndpointError
+        upload_url = r1.json().get("upload_url")
+        if not upload_url:
+            print("V50 REELS: no upload_url in START response, fallback")
+            return None
+        print(f"V50 REELS UPLOAD_URL: {upload_url}")
         with open(video_path, 'rb') as f:
             video_bytes = f.read()
-        upload_url = f"https://rupload.facebook.com/video/{video_id}"
-        headers = {"Authorization": f"OAuth {token}", "Content-Type": "application/octet-stream", "file_offset": "0"}
+        headers = {"Authorization": f"OAuth {token}", "Content-Type": "application/octet-stream", "Offset": "0", "file_offset": "0"}
         r2 = requests.post(upload_url, headers=headers, data=video_bytes, timeout=600)
-        print(f"V49 REELS UPLOAD Status {r2.status_code} {r2.text[:500]}")
+        print(f"V50 REELS UPLOAD Status {r2.status_code} {r2.text[:500]}")
         if r2.status_code not in (200, 201):
-            print("V49 REELS UPLOAD failed, fallback")
+            print("V50 REELS UPLOAD failed, fallback")
             return None
         # PHASE 3: FINISH / PUBLISH as Reels
         finish_url = f"https://graph.facebook.com/v21.0/{page_id}/video_reels"
@@ -1166,20 +1134,25 @@ def upload_video_to_facebook_reels(page_id, token, video_path, caption, label):
             j = r3.json()
             # publish returns video_id or id, normalize to {id: ...}
             vid = j.get("video_id") or j.get("id") or video_id
-            print(f"✅ V49 REELS PUBLISHED - ID: {vid} - Will appear in Reels tab for everyone")
+            print(f"✅ V50 REELS PUBLISHED - ID: {vid} - Will appear in Reels tab for everyone")
             return {"id": vid}
         return None
     except Exception as e:
-        print(f"V49 REELS Error {e}")
+        print(f"V50 REELS Error {e}")
         import traceback; traceback.print_exc()
         return None
 
-def upload_video_to_facebook(page_id, token, video_path, caption, label):
-    # V49: Try NATIVE Reels first, fallback to old /videos if Reels API fails (permissions / app review)
-    reels_result = upload_video_to_facebook_reels(page_id, token, video_path, caption, label)
+def upload_video_to_facebook(page_id, token, video_path, caption, label, is_group=False):
+    # V50: Groups do NOT support video_reels - go straight to /videos. Pages use Reels first.
+    if is_group:
+        print(f"V50 GROUP: Reels API not supported for Groups, using /videos directly")
+    else:
+        pass
+    # V50: Try NATIVE Reels first (Pages only), fallback to old /videos if Reels API fails (permissions / app review)
+    reels_result = None if is_group else upload_video_to_facebook_reels(page_id, token, video_path, caption, label)
     if reels_result:
         return reels_result
-    print("V49: Reels API failed, falling back to legacy /videos (will be in Videos tab, not Reels tab)")
+    print("V50: Reels API failed, falling back to legacy /videos (will be in Videos tab, not Reels tab)")
     try:
         print(f"Uploading {label} - {Path(video_path).stat().st_size/1024/1024:.2f} MB via /videos fallback")
         url = f"https://graph.facebook.com/v18.0/{page_id}/videos"
@@ -1269,7 +1242,7 @@ async def main():
                 if FB_GROUP_ID and FB_GROUP_ID.strip():
                     try:
                         print(f"Attempting optional group post for {FB_GROUP_ID}...")
-                        group_result = upload_video_to_facebook(FB_GROUP_ID, FB_PAGE_TOKEN, final_video, caption, f"{title}")
+                        group_result = upload_video_to_facebook(FB_GROUP_ID, FB_PAGE_TOKEN, final_video, caption, f"{title}", is_group=True)
                         if group_result:
                             print(f"✅ GROUP ALSO POSTED - ID: {group_result.get('id','unknown')}")
                         else:
