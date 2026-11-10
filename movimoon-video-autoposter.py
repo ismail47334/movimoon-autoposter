@@ -2,7 +2,7 @@ import os, requests, random, re, time, asyncio, json, subprocess, pathlib
 from datetime import datetime, timedelta
 from pathlib import Path
 
-print("=== MoviMoon Bot - V48 FINAL | V46 BASELINE LOCKED + YT TAG FIX v2 + INVALID_SCOPE FIX ===")
+print("=== MoviMoon Bot - V49 FINAL | V46 BASELINE LOCKED + FB NATIVE REELS API FIX ===")
 
 try:
     import edge_tts
@@ -569,7 +569,7 @@ Output JSON only: {{"voiceover":"...","bangla_title":"...","caption":"...","word
         import traceback; traceback.print_exc()
         return None, None, None
 
-def call_gemini_video_script(title, year, m_type, rating, overview, link, movie=None, target_words=155, trailer_duration=60):
+def call_gemini_video_script(title, year, m_type, rating, overview, link, movie=None, target_words=160, trailer_duration=60):
     genre_str = get_genre_names(movie.get("genre_ids", []) if movie else [], english=True)
     genre_str_bn = get_genre_names(movie.get("genre_ids", []) if movie else [], english=False)
     title_raw = title
@@ -604,7 +604,7 @@ def call_gemini_video_script(title, year, m_type, rating, overview, link, movie=
 Title: {title} Year: {year} Type: {m_type} Genre: {genre_str} Rating: {rating}/10 Synopsis: {overview} Link: {link} Target: {trailer_duration:.0f}s Words: {target_min}-{target_max}
 Genre Direction: {genre_direction}
 ROLE: Chief Bengali Movie Reviewer for MoviMoon. Create DISTINCTIVE Bengali voiceover that hooks in 2-3 seconds, explains central premise and conflict, creates curiosity without spoilers, ends with CTA.
-CRITICAL: EXACTLY {target_min}-{target_max} words MAX {target_max}. MUST include at end: "পুরো সিনেমাটির লিঙ্ক পেতে ডেস্ক্রিপশন দেখুন অথবা ভিজিট করুন মুভিমুন ডট অনলাইন।"
+CRITICAL: EXACTLY {target_min}-{target_max} words MAX {target_max}. MUST include at end: "পুরো সিনেমাটি দেখতে ভিজিট করুন মুভিমুন ডট অনলাইন।"
 OUTPUT JSON ONLY: {{"voiceover": "{target_min}-{target_max} words...", "bangla_title": "title", "caption": "summary", "word_count": {target_min}}}
 Return JSON only.
 """
@@ -616,7 +616,7 @@ Return JSON only.
         "gemini-4-argon",
         "gemini-3.1-pro-preview"
     ]
-    def smart_expand_to_limit(current_voice, current_wc, target_min=150, target_max=155):
+    def smart_expand_to_limit(current_voice, current_wc, target_min=165, target_max=170):
         expansions = [
             f"এই {genre_str_bn or 'গল্প'}তে প্রতিটি দৃশ্য গল্পের সাথে জড়িত।",
             "পরিচালকের গল্প বলার ধরন দর্শককে ধরে রাখবে।",
@@ -737,7 +737,7 @@ OUTPUT ONLY JSON: {{"voiceover": "{target_min}-{target_max} words...", "bangla_t
     story_bn = "এক অসাধারণ রহস্যময় গল্পের জগত!"
     base = f"বন্ধুরা আজকে কথা বলবো {year} সালের অসাধারণ {genre_str} সিনেমা {title_raw} নিয়ে। {overview[:200]} "
     middle = "এই সিনেমার প্রতিটি দৃশ্য অসাধারণভাবে সাজানো হয়েছে। পরিচালকের মুন্সিয়ানা মুগ্ধ করবে। অভিনেতাদের দুর্দান্ত অভিনয়, সিনেমাটোগ্রাফি এবং আবহ সঙ্গীত প্রাণবন্ত। প্রতিটি মুহূর্তে টানটান উত্তেজনা রয়েছে। গল্পটা মন ছুঁয়ে যাবে। শেষের টুইস্টটা একেবারে অপ্রত্যাশিত। "
-    end = "এই সিনেমাটি অবশ্যই দেখার মতো। পুরো সিনেমাটির লিঙ্ক পেতে ডেস্ক্রিপশন দেখুন অথবা ভিজিট করুন মুভিমুন ডট অনলাইন।"
+    end = "এই সিনেমাটি অবশ্যই দেখার মতো। পুরো সিনেমাটি দেখতে ভিজিট করুন মুভিমুন ডট অনলাইন।"
     full = base + middle*2 + end
     words = full.split()
     if len(words) > target_max:
@@ -956,7 +956,7 @@ def build_youtube_seo_metadata(title, year, m_type, genre_str, rating, story_bn,
     bn_title = bangla_title.strip() if bangla_title else en_title
     type_label = "Movie" if m_type == "movie" else "Web Series"
     type_bn = "সিনেমা" if m_type == "movie" else "সিরিজ"
-    base_title = f"{en_title} | {en_title} ({year})"
+    base_title = f"{bn_title} | {en_title} ({year})"
     if len(base_title) > 70:
         base_title = f"{en_title} ({year})"
     if len(base_title) > 80:
@@ -1125,9 +1125,63 @@ def upload_video_to_youtube(video_path, yt_title, yt_description, yt_tags):
             print("⚠ YouTube quota exceeded (100/day limit). Will retry next run.")
         return None
 
-def upload_video_to_facebook(page_id, token, video_path, caption, label):
+def upload_video_to_facebook_reels(page_id, token, video_path, caption, label):
+    # V49: Native Facebook Reels API - 3 phases: start -> rupload -> finish/publish
+    # Old code used /videos which lands in Videos tab, NOT Reels tab = no Reels feed distribution
     try:
-        print(f"Uploading {label} - {Path(video_path).stat().st_size/1024/1024:.2f} MB")
+        file_size = Path(video_path).stat().st_size
+        print(f"V49 REELS: Uploading {label} as NATIVE REEL - {file_size/1024/1024:.2f} MB")
+        # PHASE 1: START
+        start_url = f"https://graph.facebook.com/v21.0/{page_id}/video_reels"
+        r1 = requests.post(start_url, data={"upload_phase": "start", "file_size": file_size, "access_token": token}, timeout=60)
+        print(f"V49 REELS START Status {r1.status_code} {r1.text[:500]}")
+        if r1.status_code != 200:
+            print("V49 REELS START failed, falling back to /videos")
+            return None
+        video_id = r1.json().get("video_id")
+        if not video_id:
+            print("V49 REELS: no video_id, fallback")
+            return None
+        # PHASE 2: UPLOAD bytes to rupload.facebook.com with OAuth header
+        with open(video_path, 'rb') as f:
+            video_bytes = f.read()
+        upload_url = f"https://rupload.facebook.com/video/{video_id}"
+        headers = {"Authorization": f"OAuth {token}", "Content-Type": "application/octet-stream", "file_offset": "0"}
+        r2 = requests.post(upload_url, headers=headers, data=video_bytes, timeout=600)
+        print(f"V49 REELS UPLOAD Status {r2.status_code} {r2.text[:500]}")
+        if r2.status_code not in (200, 201):
+            print("V49 REELS UPLOAD failed, fallback")
+            return None
+        # PHASE 3: FINISH / PUBLISH as Reels
+        finish_url = f"https://graph.facebook.com/v21.0/{page_id}/video_reels"
+        r3 = requests.post(finish_url, data={
+            "upload_phase": "finish",
+            "video_id": video_id,
+            "video_state": "PUBLISHED",
+            "description": caption,
+            "access_token": token
+        }, timeout=120)
+        print(f"V49 REELS PUBLISH Status {r3.status_code} {r3.text[:800]}")
+        if r3.status_code == 200:
+            j = r3.json()
+            # publish returns video_id or id, normalize to {id: ...}
+            vid = j.get("video_id") or j.get("id") or video_id
+            print(f"✅ V49 REELS PUBLISHED - ID: {vid} - Will appear in Reels tab for everyone")
+            return {"id": vid}
+        return None
+    except Exception as e:
+        print(f"V49 REELS Error {e}")
+        import traceback; traceback.print_exc()
+        return None
+
+def upload_video_to_facebook(page_id, token, video_path, caption, label):
+    # V49: Try NATIVE Reels first, fallback to old /videos if Reels API fails (permissions / app review)
+    reels_result = upload_video_to_facebook_reels(page_id, token, video_path, caption, label)
+    if reels_result:
+        return reels_result
+    print("V49: Reels API failed, falling back to legacy /videos (will be in Videos tab, not Reels tab)")
+    try:
+        print(f"Uploading {label} - {Path(video_path).stat().st_size/1024/1024:.2f} MB via /videos fallback")
         url = f"https://graph.facebook.com/v18.0/{page_id}/videos"
         with open(video_path, 'rb') as f:
             files = {'source': f}
