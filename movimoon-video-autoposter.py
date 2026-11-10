@@ -2,7 +2,7 @@ import os, requests, random, re, time, asyncio, json, subprocess, pathlib
 from datetime import datetime, timedelta
 from pathlib import Path
 
-print("=== MoviMoon Bot - V50 FINAL | V46 BASELINE LOCKED + FB REELS upload_url FIX + YT TAG NOISE REMOVED ===")
+print("=== MoviMoon Bot - V51 FINAL | V46 BASELINE LOCKED + FB REELS Content-Length/X-Entity-Length HEADER FIX ===")
 
 try:
     import edge_tts
@@ -1092,33 +1092,53 @@ def upload_video_to_facebook_reels(page_id, token, video_path, caption, label):
     # Old code used /videos which lands in Videos tab, NOT Reels tab = no Reels feed distribution
     try:
         file_size = Path(video_path).stat().st_size
-        print(f"V50 REELS: Uploading {label} as NATIVE REEL - {file_size/1024/1024:.2f} MB")
+        print(f"V51 REELS: Uploading {label} as NATIVE REEL - {file_size/1024/1024:.2f} MB")
         # PHASE 1: START
         start_url = f"https://graph.facebook.com/v21.0/{page_id}/video_reels"
         r1 = requests.post(start_url, data={"upload_phase": "start", "file_size": file_size, "access_token": token}, timeout=60)
-        print(f"V50 REELS START Status {r1.status_code} {r1.text[:500]}")
+        print(f"V51 REELS START Status {r1.status_code} {r1.text[:500]}")
         if r1.status_code != 200:
-            print("V50 REELS START failed, falling back to /videos")
+            print("V51 REELS START failed, falling back to /videos")
             return None
         video_id = r1.json().get("video_id")
         if not video_id:
-            print("V50 REELS: no video_id, fallback")
+            print("V51 REELS: no video_id, fallback")
             return None
         # V50 FIX: Use EXACT upload_url returned by START (v27.0 path) - NOT constructed /video/{id}
         # Log proved: START returned https://rupload.facebook.com/video-upload/v27.0/{id}
         # My V49 used https://rupload.facebook.com/video/{id} -> 400 InvalidEndpointError
         upload_url = r1.json().get("upload_url")
         if not upload_url:
-            print("V50 REELS: no upload_url in START response, fallback")
+            print("V51 REELS: no upload_url in START response, fallback")
             return None
-        print(f"V50 REELS UPLOAD_URL: {upload_url}")
+        print(f"V51 REELS UPLOAD_URL: {upload_url}")
         with open(video_path, 'rb') as f:
             video_bytes = f.read()
-        headers = {"Authorization": f"OAuth {token}", "Content-Type": "application/octet-stream", "Offset": "0", "file_offset": "0"}
-        r2 = requests.post(upload_url, headers=headers, data=video_bytes, timeout=600)
-        print(f"V50 REELS UPLOAD Status {r2.status_code} {r2.text[:500]}")
+        # V51 FIX: rupload requires BOTH Content-Length + X-Entity-Length (same value), plus Offset.
+        # V50 sent Offset + file_offset, no Length headers -> requests used Transfer-Encoding: chunked
+        # -> 400 "expected either both Content-Length and X-Entity-Length, or Transfer-Encoding alone"
+        # Fix: explicit Content-Length + X-Entity-Length, remove file_offset, force no chunked encoding.
+        headers = {
+            "Authorization": f"OAuth {token}",
+            "Content-Type": "application/octet-stream",
+            "Offset": "0",
+            "Content-Length": str(len(video_bytes)),
+            "X-Entity-Length": str(len(video_bytes)),
+            "X-Entity-Type": "video/mp4",
+        }
+        # Use a Session with stream=False so requests does NOT switch to chunked encoding
+        _sess = requests.Session()
+        _req = requests.Request("POST", upload_url, headers=headers, data=video_bytes)
+        _prep = _sess.prepare_request(_req)
+        # Ensure no Transfer-Encoding header sneaks in
+        if "Transfer-Encoding" in _prep.headers:
+            del _prep.headers["Transfer-Encoding"]
+        _prep.headers["Content-Length"] = str(len(video_bytes))
+        _prep.headers["X-Entity-Length"] = str(len(video_bytes))
+        r2 = _sess.send(_prep, timeout=600)
+        print(f"V51 REELS UPLOAD Status {r2.status_code} {r2.text[:500]}")
         if r2.status_code not in (200, 201):
-            print("V50 REELS UPLOAD failed, fallback")
+            print("V51 REELS UPLOAD failed, fallback")
             return None
         # PHASE 3: FINISH / PUBLISH as Reels
         finish_url = f"https://graph.facebook.com/v21.0/{page_id}/video_reels"
@@ -1134,11 +1154,11 @@ def upload_video_to_facebook_reels(page_id, token, video_path, caption, label):
             j = r3.json()
             # publish returns video_id or id, normalize to {id: ...}
             vid = j.get("video_id") or j.get("id") or video_id
-            print(f"✅ V50 REELS PUBLISHED - ID: {vid} - Will appear in Reels tab for everyone")
+            print(f"✅ V51 REELS PUBLISHED - ID: {vid} - Will appear in Reels tab for everyone")
             return {"id": vid}
         return None
     except Exception as e:
-        print(f"V50 REELS Error {e}")
+        print(f"V51 REELS Error {e}")
         import traceback; traceback.print_exc()
         return None
 
@@ -1152,7 +1172,7 @@ def upload_video_to_facebook(page_id, token, video_path, caption, label, is_grou
     reels_result = None if is_group else upload_video_to_facebook_reels(page_id, token, video_path, caption, label)
     if reels_result:
         return reels_result
-    print("V50: Reels API failed, falling back to legacy /videos (will be in Videos tab, not Reels tab)")
+    print("V51: Reels API failed, falling back to legacy /videos (will be in Videos tab, not Reels tab)")
     try:
         print(f"Uploading {label} - {Path(video_path).stat().st_size/1024/1024:.2f} MB via /videos fallback")
         url = f"https://graph.facebook.com/v18.0/{page_id}/videos"
