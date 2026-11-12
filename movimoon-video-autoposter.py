@@ -608,7 +608,7 @@ def call_gemini_video_script(title, year, m_type, rating, overview, link, movie=
 Title: {title} Year: {year} Type: {m_type} Genre: {genre_str} Rating: {rating}/10 Synopsis: {overview} Link: {link} Target: {trailer_duration:.0f}s Words: {target_min}-{target_max}
 Genre Direction: {genre_direction}
 ROLE: Chief Bengali Movie Reviewer for MoviMoon. Create DISTINCTIVE Bengali voiceover that hooks in 2-3 seconds, explains central premise and conflict, creates curiosity without spoilers, ends with CTA.
-CRITICAL: EXACTLY {target_min}-{target_max} words MAX {target_max}. MUST include at end: "পুরো সিনেমাটি দেখতে ভিজিট করুন মুভিমুন ডট অনলাইন।"
+CRITICAL: EXACTLY {target_min}-{target_max} words MAX {target_max}. MUST include at end: "পুরো সিনেমাটি দেখতে ডেসক্রিপশন লিঙ্ক দেখুন অথবা ভিজিট করুন মুভিমুন ডট অনলাইন।"
 OUTPUT JSON ONLY: {{"voiceover": "{target_min}-{target_max} words...", "bangla_title": "title", "caption": "summary", "word_count": {target_min}}}
 Return JSON only.
 """
