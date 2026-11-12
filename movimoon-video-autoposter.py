@@ -2,7 +2,7 @@ import os, requests, random, re, time, asyncio, json, subprocess, pathlib
 from datetime import datetime, timedelta
 from pathlib import Path
 
-print("=== MoviMoon Bot - V51 FINAL | V46 BASELINE LOCKED + FB REELS Content-Length/X-Entity-Length HEADER FIX ===")
+print("=== MoviMoon Bot - V52 FINAL | V46 BASELINE LOCKED + V51 REELS FIX + TELEGRAM ADDON | NO V51 CHANGE ===")
 
 try:
     import edge_tts
@@ -29,6 +29,10 @@ YOUTUBE_CLIENT_ID = os.getenv("YOUTUBE_CLIENT_ID")
 YOUTUBE_CLIENT_SECRET = os.getenv("YOUTUBE_CLIENT_SECRET")
 YOUTUBE_REFRESH_TOKEN = os.getenv("YOUTUBE_REFRESH_TOKEN")
 YOUTUBE_CHANNEL_ID = os.getenv("YOUTUBE_CHANNEL_ID", "")
+
+# === V52: TELEGRAM ADDON - NO CHANGE TO V51 BASE ===
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 VOICE = "bn-IN-BashkarNeural"
 RATE = "+28%"
@@ -1087,6 +1091,48 @@ def upload_video_to_youtube(video_path, yt_title, yt_description, yt_tags):
             print("⚠ YouTube quota exceeded (100/day limit). Will retry next run.")
         return None
 
+
+def upload_video_to_telegram(video_path, caption):
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        print("⚠ Telegram secrets not set, skipping Telegram")
+        return None
+    try:
+        file_size = Path(video_path).stat().st_size
+        print(f"V52 TELEGRAM: Uploading {file_size/1024/1024:.2f} MB to {TELEGRAM_CHAT_ID}")
+        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendVideo"
+        # Telegram caption limit 1024 chars
+        tg_caption = caption[:1000]
+        if len(tg_caption) > 1024:
+            tg_caption = tg_caption[:1020]
+        with open(video_path, 'rb') as f:
+            files = {'video': f}
+            data = {
+                'chat_id': TELEGRAM_CHAT_ID,
+                'caption': tg_caption,
+                'supports_streaming': True
+            }
+            r = requests.post(url, files=files, data=data, timeout=300)
+            print(f"TELEGRAM Status {r.status_code} {r.text[:500]}")
+            if r.status_code == 200:
+                print(f"✅ TELEGRAM POSTED - {r.json().get('result',{}).get('message_id')}")
+                return r.json()
+            else:
+                # Retry plain text if fails
+                print(f"TELEGRAM first try failed, retry without extra params")
+                with open(video_path, 'rb') as f2:
+                    files2 = {'video': f2}
+                    data2 = {'chat_id': TELEGRAM_CHAT_ID, 'caption': tg_caption[:900]}
+                    r2 = requests.post(url, files=files2, data=data2, timeout=300)
+                    print(f"TELEGRAM Retry {r2.status_code} {r2.text[:500]}")
+                    if r2.status_code == 200:
+                        print(f"✅ TELEGRAM POSTED (retry)")
+                        return r2.json()
+        return None
+    except Exception as e:
+        print(f"TELEGRAM Error {e}")
+        import traceback; traceback.print_exc()
+        return None
+
 def upload_video_to_facebook_reels(page_id, token, video_path, caption, label):
     # V50: Native Facebook Reels API - 3 phases: start -> rupload -> finish/publish
     # Old code used /videos which lands in Videos tab, NOT Reels tab = no Reels feed distribution
@@ -1283,6 +1329,16 @@ async def main():
                         print(f"⚠ YouTube upload failed/skip but PAGE SUCCESS - WORK DONE")
                 except Exception as ye:
                     print(f"⚠ YouTube error ignored: {ye} - PAGE SUCCESS = WORK DONE")
+                # === V52 TELEGRAM - AFTER YT, INSIDE FB SUCCESS BLOCK ===
+                try:
+                    print(f"Attempting Telegram post...")
+                    tg_result = upload_video_to_telegram(final_video, caption)
+                    if tg_result:
+                        print(f"✅ TELEGRAM ALSO POSTED - WORK DONE")
+                    else:
+                        print(f"⚠ Telegram failed/skip but PAGE SUCCESS - WORK DONE")
+                except Exception as te:
+                    print(f"⚠ Telegram error ignored: {te} - PAGE SUCCESS = WORK DONE")
                 for f in ["trailer.mp4", "trailer_60s.mp4", "poster.jpg", "voice.mp3", "bgm.mp3", "final.mp4"]:
                     try:
                         if Path(f).exists():
