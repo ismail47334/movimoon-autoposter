@@ -1,4 +1,4 @@
-name: MoviMoon V48 - HOTFIX - History Bug Fixed
+name: MoviMoon V52 - HOTFIX - Facebook - Youtube - Telegram 
 
 on:
   schedule:
@@ -51,6 +51,8 @@ jobs:
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
           YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
           YOUTUBE_CHANNEL_ID: ${{ secrets.YOUTUBE_CHANNEL_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           YOUTUBE_PROXY: ${{ secrets.YOUTUBE_PROXY }}
           YOUTUBE_PROXY_LIST: ${{ secrets.YOUTUBE_PROXY_LIST }}
         run: |
