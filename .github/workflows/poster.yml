@@ -1,4 +1,4 @@
-name: MoviMoon V52 - HOTFIX - Facebook - Youtube - Telegram 
+name: MoviMoon V53 - FB - YT - Telegram - Drive
 
 on:
   schedule:
@@ -18,7 +18,7 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install FFmpeg + Node + yt-dlp + POT - V44 FIXED
+      - name: Install FFmpeg + Node + yt-dlp + POT - V44 FIXED + V53 DRIVE
         run: |
           sudo apt-get update -y
           sudo apt-get install -y ffmpeg fonts-noto-core fonts-dejavu
@@ -29,6 +29,7 @@ jobs:
           python -m pip install -r requirements.txt --upgrade
           python -m pip install -U yt-dlp[default] --upgrade
           python -m pip install -U requests --upgrade
+          python -m pip install google-api-python-client google-auth google-auth-httplib2 --upgrade
           python -m yt_dlp --version
 
       - name: Clean old cookies - V44 NO FAKE COOKIE
@@ -36,10 +37,10 @@ jobs:
           rm -f cookies.txt youtube_oauth_token.json
           rm -rf output
           rm -f voice_text.txt temp_gemini_tts_runner.py gemini_tts_output.mp3 voice_final.wav
-          echo "V44 FIXED: History bug fixed + REST TTS + No fake cookies"
+          echo "V53: FB Reels Native + YT Shorts + Telegram + Drive Backup"
           ls -lh
 
-      - name: Run MoviMoon V44 HOTFIX
+      - name: Run MoviMoon V53 DRIVE
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
           FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
@@ -53,6 +54,8 @@ jobs:
           YOUTUBE_CHANNEL_ID: ${{ secrets.YOUTUBE_CHANNEL_ID }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
+          DRIVE_SERVICE_ACCOUNT_JSON: ${{ secrets.DRIVE_SERVICE_ACCOUNT_JSON }}
           YOUTUBE_PROXY: ${{ secrets.YOUTUBE_PROXY }}
           YOUTUBE_PROXY_LIST: ${{ secrets.YOUTUBE_PROXY_LIST }}
         run: |
@@ -64,5 +67,5 @@ jobs:
           git config --global user.name 'MoviMoon Bot'
           git config --global user.email 'bot@movimoon.online'
           git add posted_history.json || true
-          git diff --staged --quiet || git commit -m "Update history V44 HOTFIX [skip ci]" || true
+          git diff --staged --quiet || git commit -m "Update history V53 DRIVE [skip ci]" || true
           git push || true
