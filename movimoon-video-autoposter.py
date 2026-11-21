@@ -34,6 +34,10 @@ YOUTUBE_CHANNEL_ID = os.getenv("YOUTUBE_CHANNEL_ID", "")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
+# === V53: GOOGLE DRIVE ADDON - NO CHANGE TO V51/V52 BASE ===
+DRIVE_FOLDER_ID = os.getenv("DRIVE_FOLDER_ID", "1fVvNjqdMti1yzRgvuqHF1QUs-CCyll1G")
+DRIVE_SERVICE_ACCOUNT_JSON = os.getenv("DRIVE_SERVICE_ACCOUNT_JSON")
+
 VOICE = "bn-IN-BashkarNeural"
 RATE = "+28%"
 PITCH = "+2Hz"
@@ -805,11 +809,9 @@ def generate_tts_with_gemini(text, output_path="voice.mp3"):
                     print(f"TTS {tts_model} no inlineData: {str(data)[:800]}")
                     continue
                 audio_bytes = base64.b64decode(b64_data)
-                # Doc says default is WAV with RIFF header, save as wav then convert to mp3
                 temp_wav = "voice_temp.wav"
                 with open(temp_wav, "wb") as f:
                     f.write(audio_bytes)
-                # Convert WAV to polished MP3
                 cmd = f'ffmpeg -y -i "{temp_wav}" -filter:a "highpass=f=80,lowpass=f=12000,acompressor=threshold=-20dB:ratio=3:attack=5:release=50,loudnorm=I=-16:TP=-1.5:LRA=7,volume=1.1" -c:a libmp3lame -q:a 0 -ar 48000 "{output_path}"'
                 subprocess.run(cmd, shell=True, capture_output=True, timeout=20)
                 if Path(temp_wav).exists():
@@ -818,7 +820,6 @@ def generate_tts_with_gemini(text, output_path="voice.mp3"):
                     print(f"Gemini TTS SUCCESS - Model {tts_model} - {Path(output_path).stat().st_size/1024:.1f} KB saved to {output_path}")
                     return True
                 else:
-                    # fallback direct write
                     with open(output_path, "wb") as f:
                         f.write(audio_bytes)
                     if Path(output_path).stat().st_size > 1000:
@@ -888,7 +889,6 @@ def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp
             if not Path(font_path).exists():
                 font_path = "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
         print(f"Creating {dur}s video FINAL V38 FIXED-TRIM + V39 MASTER PROMPT 1440p SMART-TRIM ZOOM 65% 2K - Top: {label_top_safe} | {safe_title} | Type: {m_type}")
-        # V46 FIX: Chained filter_complex with proper labels to avoid "Cannot find an unused video input stream" error
         if poster_path and Path(poster_path).exists():
             cmd = (
                 f"ffmpeg -y -loop 1 -t {dur} -i \"{poster_path}\" "
@@ -943,11 +943,9 @@ def create_9_16_hd_video(trailer_path, poster_path, voice_path, output="final.mp
         return None
 
 def clean_yt_tag(t):
-    # YouTube tags: only allow a-z0-9 and space, max 30 chars, no special chars
-    # Bengali tags cause silent reject, so convert to english only for tags
     import re
     t = t.strip().lower()
-    t = re.sub(r'[^a-z0-9 ]+', ' ', t)  # keep only english alphanumeric
+    t = re.sub(r'[^a-z0-9 ]+', ' ', t)
     t = re.sub(r'\s+', ' ', t).strip()
     if len(t) < 2 or len(t) > 30:
         return None
@@ -989,7 +987,6 @@ Disclaimer: This video uses trailer clips under fair use for review purposes. Al
 """
     if len(description) > 4500:
         description = description[:4500]
-    # === V47 TAG FIX: ENGLISH ONLY, CLEANED, YT-COMPLIANT ===
     raw_tags = []
     raw_tags.append(en_title.lower())
     raw_tags.append(f"{en_title} {year}")
@@ -1012,7 +1009,6 @@ Disclaimer: This video uses trailer clips under fair use for review purposes. Al
         ct = clean_yt_tag(t)
         if ct and ct not in clean_tags:
             clean_tags.append(ct)
-    # Enforce YouTube 500 char total limit
     total_len = 0
     final_tags = []
     for t in clean_tags:
@@ -1042,8 +1038,6 @@ def upload_video_to_youtube(video_path, yt_title, yt_description, yt_tags):
             from google.oauth2.credentials import Credentials
             from googleapiclient.discovery import build
             from googleapiclient.http import MediaFileUpload
-        # V48 FIX: Use ONLY youtube.upload scope for insert (matches refresh token scope)
-        # This prevents invalid_scope error seen in V47
         creds_upload = Credentials(
             None,
             refresh_token=YOUTUBE_REFRESH_TOKEN,
@@ -1081,7 +1075,6 @@ def upload_video_to_youtube(video_path, yt_title, yt_description, yt_tags):
                 print(f"YouTube upload {int(status.progress()*100)}%")
         vid_id = response.get('id')
         print(f"✅ YOUTUBE SHORTS UPLOADED - ID: {vid_id} - https://youtube.com/shorts/{vid_id} | Tags sent in insert: {yt_tags}")
-        # V50: Tags already sent in insert() - NO separate update() needed. Skipping to avoid invalid_scope noise.
         print(f"V50 YT: Tags already in insert, skipping separate update (avoids invalid_scope)")
         return response
     except Exception as e:
@@ -1091,7 +1084,6 @@ def upload_video_to_youtube(video_path, yt_title, yt_description, yt_tags):
             print("⚠ YouTube quota exceeded (100/day limit). Will retry next run.")
         return None
 
-
 def upload_video_to_telegram(video_path, caption):
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         print("⚠ Telegram secrets not set, skipping Telegram")
@@ -1100,7 +1092,6 @@ def upload_video_to_telegram(video_path, caption):
         file_size = Path(video_path).stat().st_size
         print(f"V52 TELEGRAM: Uploading {file_size/1024/1024:.2f} MB to {TELEGRAM_CHAT_ID}")
         url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendVideo"
-        # Telegram caption limit 1024 chars
         tg_caption = caption[:1000]
         if len(tg_caption) > 1024:
             tg_caption = tg_caption[:1020]
@@ -1117,7 +1108,6 @@ def upload_video_to_telegram(video_path, caption):
                 print(f"✅ TELEGRAM POSTED - {r.json().get('result',{}).get('message_id')}")
                 return r.json()
             else:
-                # Retry plain text if fails
                 print(f"TELEGRAM first try failed, retry without extra params")
                 with open(video_path, 'rb') as f2:
                     files2 = {'video': f2}
@@ -1133,13 +1123,62 @@ def upload_video_to_telegram(video_path, caption):
         import traceback; traceback.print_exc()
         return None
 
+def upload_video_to_drive(video_path, caption, title_year="MoviMoon"):
+    # === V53 DRIVE ADDON - Resumable upload to specific folder ===
+    if not DRIVE_FOLDER_ID:
+        print("⚠ DRIVE_FOLDER_ID not set, skipping Drive")
+        return None
+    if not DRIVE_SERVICE_ACCOUNT_JSON:
+        print("⚠ DRIVE_SERVICE_ACCOUNT_JSON not set, skipping Drive")
+        return None
+    try:
+        file_size = Path(video_path).stat().st_size
+        print(f"V53 DRIVE: Uploading {file_size/1024/1024:.2f} MB to Folder {DRIVE_FOLDER_ID}")
+        import json as js
+        try:
+            from google.oauth2 import service_account
+            from googleapiclient.discovery import build
+            from googleapiclient.http import MediaFileUpload
+        except ImportError:
+            print("Drive libs not installed, installing...")
+            subprocess.check_call(["pip", "install", "google-api-python-client", "google-auth", "google-auth-httplib2"])
+            from google.oauth2 import service_account
+            from googleapiclient.discovery import build
+            from googleapiclient.http import MediaFileUpload
+
+        sa_info = js.loads(DRIVE_SERVICE_ACCOUNT_JSON)
+        creds = service_account.Credentials.from_service_account_info(
+            sa_info, scopes=['https://www.googleapis.com/auth/drive']
+        )
+        service = build('drive', 'v3', credentials=creds)
+
+        safe_name = re.sub(r'[^a-zA-Z0-9_\- ]', '', title_year).strip()[:80]
+        file_name = f"{safe_name}_{datetime.now().strftime('%Y%m%d_%H%M')}.mp4"
+
+        media = MediaFileUpload(video_path, mimetype='video/mp4', resumable=True)
+        file_metadata = {
+            'name': file_name,
+            'parents': [DRIVE_FOLDER_ID],
+            'description': caption[:1000]
+        }
+
+        created = service.files().create(
+            body=file_metadata,
+            media_body=media,
+            fields='id, webViewLink, webContentLink, name'
+        ).execute()
+
+        print(f"✅ V53 DRIVE POSTED - File: {created.get('name')} - ID: {created.get('id')} - Link: {created.get('webViewLink')}")
+        return created
+    except Exception as e:
+        print(f"⚠ V53 DRIVE failed/skip but PAGE SUCCESS - WORK DONE: {e}")
+        import traceback; traceback.print_exc()
+        return None
+
 def upload_video_to_facebook_reels(page_id, token, video_path, caption, label):
-    # V50: Native Facebook Reels API - 3 phases: start -> rupload -> finish/publish
-    # Old code used /videos which lands in Videos tab, NOT Reels tab = no Reels feed distribution
     try:
         file_size = Path(video_path).stat().st_size
         print(f"V51 REELS: Uploading {label} as NATIVE REEL - {file_size/1024/1024:.2f} MB")
-        # PHASE 1: START
         start_url = f"https://graph.facebook.com/v21.0/{page_id}/video_reels"
         r1 = requests.post(start_url, data={"upload_phase": "start", "file_size": file_size, "access_token": token}, timeout=60)
         print(f"V51 REELS START Status {r1.status_code} {r1.text[:500]}")
@@ -1150,9 +1189,6 @@ def upload_video_to_facebook_reels(page_id, token, video_path, caption, label):
         if not video_id:
             print("V51 REELS: no video_id, fallback")
             return None
-        # V50 FIX: Use EXACT upload_url returned by START (v27.0 path) - NOT constructed /video/{id}
-        # Log proved: START returned https://rupload.facebook.com/video-upload/v27.0/{id}
-        # My V49 used https://rupload.facebook.com/video/{id} -> 400 InvalidEndpointError
         upload_url = r1.json().get("upload_url")
         if not upload_url:
             print("V51 REELS: no upload_url in START response, fallback")
@@ -1160,10 +1196,6 @@ def upload_video_to_facebook_reels(page_id, token, video_path, caption, label):
         print(f"V51 REELS UPLOAD_URL: {upload_url}")
         with open(video_path, 'rb') as f:
             video_bytes = f.read()
-        # V51 FIX: rupload requires BOTH Content-Length + X-Entity-Length (same value), plus Offset.
-        # V50 sent Offset + file_offset, no Length headers -> requests used Transfer-Encoding: chunked
-        # -> 400 "expected either both Content-Length and X-Entity-Length, or Transfer-Encoding alone"
-        # Fix: explicit Content-Length + X-Entity-Length, remove file_offset, force no chunked encoding.
         headers = {
             "Authorization": f"OAuth {token}",
             "Content-Type": "application/octet-stream",
@@ -1172,11 +1204,9 @@ def upload_video_to_facebook_reels(page_id, token, video_path, caption, label):
             "X-Entity-Length": str(len(video_bytes)),
             "X-Entity-Type": "video/mp4",
         }
-        # Use a Session with stream=False so requests does NOT switch to chunked encoding
         _sess = requests.Session()
         _req = requests.Request("POST", upload_url, headers=headers, data=video_bytes)
         _prep = _sess.prepare_request(_req)
-        # Ensure no Transfer-Encoding header sneaks in
         if "Transfer-Encoding" in _prep.headers:
             del _prep.headers["Transfer-Encoding"]
         _prep.headers["Content-Length"] = str(len(video_bytes))
@@ -1186,7 +1216,6 @@ def upload_video_to_facebook_reels(page_id, token, video_path, caption, label):
         if r2.status_code not in (200, 201):
             print("V51 REELS UPLOAD failed, fallback")
             return None
-        # PHASE 3: FINISH / PUBLISH as Reels
         finish_url = f"https://graph.facebook.com/v21.0/{page_id}/video_reels"
         r3 = requests.post(finish_url, data={
             "upload_phase": "finish",
@@ -1198,7 +1227,6 @@ def upload_video_to_facebook_reels(page_id, token, video_path, caption, label):
         print(f"V49 REELS PUBLISH Status {r3.status_code} {r3.text[:800]}")
         if r3.status_code == 200:
             j = r3.json()
-            # publish returns video_id or id, normalize to {id: ...}
             vid = j.get("video_id") or j.get("id") or video_id
             print(f"✅ V51 REELS PUBLISHED - ID: {vid} - Will appear in Reels tab for everyone")
             return {"id": vid}
@@ -1209,12 +1237,10 @@ def upload_video_to_facebook_reels(page_id, token, video_path, caption, label):
         return None
 
 def upload_video_to_facebook(page_id, token, video_path, caption, label, is_group=False):
-    # V50: Groups do NOT support video_reels - go straight to /videos. Pages use Reels first.
     if is_group:
         print(f"V50 GROUP: Reels API not supported for Groups, using /videos directly")
     else:
         pass
-    # V50: Try NATIVE Reels first (Pages only), fallback to old /videos if Reels API fails (permissions / app review)
     reels_result = None if is_group else upload_video_to_facebook_reels(page_id, token, video_path, caption, label)
     if reels_result:
         return reels_result
@@ -1339,13 +1365,23 @@ async def main():
                         print(f"⚠ Telegram failed/skip but PAGE SUCCESS - WORK DONE")
                 except Exception as te:
                     print(f"⚠ Telegram error ignored: {te} - PAGE SUCCESS = WORK DONE")
+                # === V53 DRIVE - AFTER TELEGRAM, INSIDE FB SUCCESS BLOCK - NEVER FAILS WORKFLOW ===
+                try:
+                    print(f"Attempting Google Drive backup to {DRIVE_FOLDER_ID}...")
+                    drive_result = upload_video_to_drive(final_video, caption, f"{title_raw} {year}")
+                    if drive_result:
+                        print(f"✅ DRIVE ALSO POSTED - WORK DONE - {drive_result.get('webViewLink')}")
+                    else:
+                        print(f"⚠ Drive failed/skip but PAGE SUCCESS - WORK DONE")
+                except Exception as de:
+                    print(f"⚠ Drive error ignored: {de} - PAGE SUCCESS = WORK DONE")
                 for f in ["trailer.mp4", "trailer_60s.mp4", "poster.jpg", "voice.mp3", "bgm.mp3", "final.mp4"]:
                     try:
                         if Path(f).exists():
                             Path(f).unlink()
                     except:
                         pass
-                print(f"🎉 1 VIDEO DONE - FB + YT (optional) - WORKFLOW COMPLETE - STOPPING, NO 2nd TRY")
+                print(f"🎉 1 VIDEO DONE - FB + YT + TG + DRIVE (optional) - WORKFLOW COMPLETE - STOPPING, NO 2nd TRY")
                 break
             else:
                 print(f"Failed to post {title}")
